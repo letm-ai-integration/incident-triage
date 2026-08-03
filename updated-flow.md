@@ -1256,3 +1256,1051 @@ No existing agent, service, or tool needs to be modified.
 ---
 
 
+# AI Incident Triage - Folder Structure Guide
+
+This document explains the purpose of every folder and file in the project. Think of it as the architecture guide for anyone joining the project.
+
+---
+
+# Root Directory
+
+```text
+ai-incident-triage/
+```
+
+This is the root of the project. Everything inside is organized by responsibility so that the application remains modular, scalable, and easy to maintain.
+
+---
+
+# app/
+
+```text
+app/
+```
+
+This is the heart of the application.
+
+It contains all the application logic, LangGraph workflow, AI agents, services, business models, LLM integrations, and supporting modules.
+
+---
+
+# main.py
+
+```text
+app/main.py
+```
+
+## Purpose
+
+Main entry point of the application.
+
+Responsible for:
+
+* Starting the application
+* Loading configuration
+* Building the LangGraph workflow
+* Receiving incident input
+* Returning the final incident report
+
+Think of this as:
+
+> **Application Launcher**
+
+---
+
+# config.py
+
+```text
+app/config.py
+```
+
+## Purpose
+
+Stores application configuration.
+
+Examples
+
+* API Keys
+* Model Name
+* Vector Store Path
+* Confidence Threshold
+* Logging Configuration
+* Feature Flags
+
+Instead of writing
+
+```python
+os.getenv(...)
+```
+
+throughout the project, everything is centralized here.
+
+---
+
+# dependencies.py
+
+```text
+app/dependencies.py
+```
+
+## Purpose
+
+Creates shared objects used throughout the application.
+
+Example
+
+* LLM instance
+* Embedding model
+* Vector Store
+* Logger
+* Knowledge Retriever
+
+Instead of creating them multiple times, the application reuses these objects.
+
+---
+
+# graph/
+
+```text
+app/graph/
+```
+
+## Purpose
+
+Contains the **LangGraph workflow**.
+
+This folder controls **how the incident moves through the system**.
+
+It does **not** perform AI reasoning.
+
+It only controls
+
+```
+Where to go next
+```
+
+---
+
+# workflow.py
+
+Defines the complete LangGraph workflow.
+
+Example
+
+```
+Input
+
+↓
+
+Classification
+
+↓
+
+Severity
+
+↓
+
+Investigation
+
+↓
+
+RCA
+
+↓
+
+Resolution
+
+↓
+
+Verification
+
+↓
+
+Report
+```
+
+---
+
+# builder.py
+
+Creates the LangGraph object.
+
+Registers
+
+* Nodes
+* Edges
+* Conditional routing
+
+---
+
+# router.py
+
+Contains decision-making logic.
+
+Example
+
+```
+Confidence > 80%
+
+↓
+
+Continue
+
+Else
+
+↓
+
+Re-investigate
+```
+
+---
+
+# state.py
+
+Defines the shared state flowing between every node.
+
+Example
+
+```python
+Incident
+
+Classification
+
+Severity
+
+Impact
+
+Evidence
+
+Hypothesis
+
+Root Cause
+
+Resolution
+
+Report
+```
+
+Every node updates this object.
+
+---
+
+# graph/nodes/
+
+```text
+graph/nodes/
+```
+
+Each file represents **one LangGraph node**.
+
+The node simply calls the appropriate service or AI agent.
+
+Example
+
+```
+classification.py
+
+↓
+
+Calls
+
+↓
+
+Classifier Agent
+```
+
+This keeps orchestration separate from reasoning.
+
+---
+
+# agents/
+
+```text
+agents/
+```
+
+## Purpose
+
+Contains every AI Agent.
+
+Each agent performs one specific reasoning task.
+
+The graph calls agents.
+
+Agents never call the graph.
+
+---
+
+# base.py
+
+Shared base class.
+
+Provides
+
+* LLM access
+* Prompt execution
+* Output parsing
+* Error handling
+
+Every agent inherits from this.
+
+---
+
+# classifier/
+
+Responsible for identifying the incident category.
+
+Example
+
+```
+CrashLoopBackOff
+
+↓
+
+Kubernetes
+```
+
+---
+
+# impact/
+
+Determines business impact.
+
+Example
+
+```
+Production
+
+↓
+
+Payment Service
+
+↓
+
+High Impact
+```
+
+---
+
+# severity/
+
+Determines
+
+```
+P1
+
+P2
+
+P3
+```
+
+Uses
+
+* Rules
+* LLM reasoning
+
+---
+
+# investigation/
+
+This is your AI Investigation Engineer.
+
+Responsibilities
+
+* Analyze incident evidence
+* Identify symptoms
+* Generate hypotheses
+* Identify missing evidence
+
+It never connects to a real Kubernetes cluster in your current project.
+
+---
+
+# rca/
+
+Determines the most likely root cause.
+
+Example
+
+```
+Missing Secret
+
+Confidence 92%
+```
+
+---
+
+# resolution/
+
+Generates step-by-step resolution.
+
+Example
+
+```
+Verify Secret
+
+Restart Deployment
+
+Validate Pods
+```
+
+---
+
+# report/
+
+Creates the final structured incident report.
+
+---
+
+# notification/
+
+Generates Slack/Jira/Teams notifications.
+
+---
+
+# prompt.py
+
+Contains the prompt used by that agent.
+
+Each agent has its own prompt.
+
+---
+
+# parser.py
+
+Converts raw LLM output into structured Pydantic objects.
+
+Never trust raw LLM responses.
+
+---
+
+# domain/
+
+```text
+domain/
+```
+
+Contains the business objects used throughout the application.
+
+Think of these as the language of your business.
+
+---
+
+# models/
+
+Defines all entities.
+
+Examples
+
+```
+Incident
+
+Evidence
+
+Hypothesis
+
+Severity
+
+Resolution
+
+Report
+```
+
+These models are shared everywhere.
+
+---
+
+# enums/
+
+Stores fixed values.
+
+Example
+
+```
+Priority
+
+P1
+
+P2
+
+P3
+```
+
+instead of strings.
+
+---
+
+# constants.py
+
+Stores constants used throughout the application.
+
+Example
+
+```
+Confidence Threshold
+
+Default Namespace
+
+Supported Categories
+```
+
+---
+
+# services/
+
+```text
+services/
+```
+
+Contains business logic.
+
+This folder answers
+
+```
+How should the application behave?
+```
+
+The services never know about prompts.
+
+They never know about LangGraph.
+
+They simply perform business operations.
+
+Example
+
+```
+Severity Service
+
+↓
+
+Uses rules
+
+↓
+
+Returns
+
+P1
+```
+
+---
+
+# knowledge/
+
+```text
+knowledge/
+```
+
+Responsible for the RAG pipeline.
+
+Everything related to knowledge retrieval lives here.
+
+---
+
+# loader.py
+
+Loads documents.
+
+---
+
+# chunker.py
+
+Splits documents into chunks.
+
+---
+
+# embeddings.py
+
+Creates embeddings.
+
+---
+
+# vector_store.py
+
+Stores embeddings.
+
+---
+
+# retriever.py
+
+Retrieves relevant documents.
+
+---
+
+# llm/
+
+```text
+llm/
+```
+
+Contains LLM abstraction.
+
+Never call Groq/OpenAI directly elsewhere.
+
+---
+
+# factory.py
+
+Returns the configured LLM.
+
+Example
+
+```
+Groq
+
+OpenAI
+
+Anthropic
+
+Gemini
+```
+
+One interface.
+
+---
+
+# providers/
+
+Each provider implementation.
+
+Easy to switch models.
+
+---
+
+# structured_output.py
+
+Converts LLM output into structured objects.
+
+---
+
+# prompts/
+
+```text
+prompts/
+```
+
+Stores every prompt outside Python code.
+
+Makes prompt engineering easier.
+
+---
+
+# shared/
+
+Reusable prompts.
+
+Example
+
+```
+System Prompt
+
+Output Format
+
+Guardrails
+```
+
+---
+
+# templates/
+
+Agent-specific prompts.
+
+Example
+
+```
+Classifier
+
+Investigation
+
+RCA
+
+Resolution
+```
+
+---
+
+# tools/
+
+```text
+tools/
+```
+
+Represents external systems.
+
+Tools gather information.
+
+They do not perform reasoning.
+
+---
+
+# mock/
+
+Contains mock implementations.
+
+Example
+
+```
+Mock Logs
+
+Mock Events
+
+Mock Metrics
+
+Mock Deployments
+```
+
+Used for your project.
+
+---
+
+# adapters/
+
+Real implementations.
+
+Future examples
+
+```
+Kubernetes API
+
+Prometheus
+
+CloudWatch
+
+Slack
+
+Jira
+```
+
+Currently unused but production-ready.
+
+---
+
+# rules/
+
+```text
+rules/
+```
+
+Contains deterministic rules.
+
+Never ask an LLM something that can be implemented with code.
+
+Example
+
+```
+Production
+
++
+
+Payment
+
+↓
+
+Always P1
+```
+
+---
+
+# guardrails/
+
+```text
+guardrails/
+```
+
+Protects the AI.
+
+Examples
+
+* Prompt injection prevention
+* Domain validation
+* Safety checks
+* Input validation
+
+---
+
+# repositories/
+
+```text
+repositories/
+```
+
+Responsible for reading and writing data.
+
+Today
+
+```
+JSON
+```
+
+Tomorrow
+
+```
+PostgreSQL
+
+MongoDB
+
+S3
+```
+
+Nothing else changes.
+
+---
+
+# schemas/
+
+```text
+schemas/
+```
+
+Contains API contracts.
+
+Defines
+
+* Requests
+* Responses
+* Graph State
+* Tool Outputs
+
+Keeps communication consistent.
+
+---
+
+# utils/
+
+```text
+utils/
+```
+
+Common reusable helpers.
+
+Examples
+
+* Logging
+* JSON utilities
+* Time formatting
+* Confidence calculations
+
+---
+
+# telemetry/
+
+```text
+telemetry/
+```
+
+Observability.
+
+Responsible for
+
+* LangSmith tracing
+* Performance metrics
+* Execution tracing
+
+Useful during development and debugging.
+
+---
+
+# knowledge_base/
+
+```text
+knowledge_base/
+```
+
+Stores the documents used for RAG.
+
+Examples
+
+```
+Runbooks
+
+SOPs
+
+Postmortems
+
+Previous Incidents
+
+Kubernetes Guides
+```
+
+These are indexed into the vector database.
+
+---
+
+# data/
+
+```text
+data/
+```
+
+Contains application data.
+
+---
+
+# incidents/
+
+Mock incidents.
+
+Example
+
+```
+CrashLoopBackOff
+
+ImagePullBackOff
+
+503
+
+Database Timeout
+```
+
+These simulate production incidents.
+
+---
+
+# outcomes/
+
+Mock verification data.
+
+Example
+
+```
+Resolved
+
+Unresolved
+```
+
+Used by the Verification Agent.
+
+---
+
+# reports/
+
+Stores generated reports.
+
+Useful for demos and future auditing.
+
+---
+
+# scripts/
+
+```text
+scripts/
+```
+
+Utility scripts.
+
+These are one-time or maintenance tasks.
+
+Examples
+
+```
+Seed mock data
+
+Build vector store
+
+Ingest documents
+```
+
+---
+
+# .env.example
+
+Template showing all required environment variables.
+
+Never commit the real `.env`.
+
+---
+
+# .gitignore
+
+Defines files Git should ignore.
+
+Example
+
+```
+__pycache__
+
+.env
+
+venv
+
+logs
+```
+
+---
+
+# pyproject.toml
+
+Modern Python project configuration.
+
+Contains
+
+* Project metadata
+* Dependencies (if using modern packaging)
+* Tool configuration (formatter, linter, etc.)
+
+---
+
+# requirements.txt
+
+Lists Python package dependencies.
+
+Useful for simple installation.
+
+---
+
+# README.md
+
+The project's primary documentation.
+
+Should include:
+
+* Project overview
+* Architecture diagram
+* Folder structure
+* Installation steps
+* Configuration
+* Running the project
+* Sample incident input/output
+* Team contribution guide
+
+---
+
+# LICENSE
+
+Specifies how others may use, modify, and distribute the project.
+
+---
+
+# Overall Architecture Mapping
+
+| Architecture Step         | Project Folder                                                                            |
+| ------------------------- | ----------------------------------------------------------------------------------------- |
+| Incident Input            | `data/`, `tools/mock/`                                                                    |
+| Incident Ingestion        | `graph/nodes/ingestion.py`, `services/ingestion_service.py`                               |
+| Incident Classification   | `agents/classifier/`, `services/classification_service.py`                                |
+| Impact Assessment         | `agents/impact/`, `services/impact_service.py`                                            |
+| Severity Engine           | `agents/severity/`, `rules/severity.py`, `services/severity_service.py`                   |
+| Investigation             | `agents/investigation/`, `services/evidence_service.py`, `services/hypothesis_service.py` |
+| RCA                       | `agents/rca/`, `services/rca_service.py`                                                  |
+| Knowledge Retrieval (RAG) | `knowledge/`, `knowledge_base/`                                                           |
+| Resolution Planning       | `agents/resolution/`, `services/recommendation_service.py`                                |
+| Safety & Approval         | `guardrails/`, `services/approval_service.py`                                             |
+| Verification              | `graph/nodes/verification.py`, `services/verification_service.py`                         |
+| Incident Report           | `agents/report/`, `services/report_service.py`                                            |
+| Notifications             | `agents/notification/`, `services/notification_service.py`, `tools/adapters/`             |
+
+## Design Philosophy
+
+The project follows a layered architecture with clear separation of concerns:
+
+* **Graph** orchestrates the workflow.
+* **Agents** perform AI reasoning.
+* **Services** implement business logic.
+* **Rules** contain deterministic decisions.
+* **Tools** interact with external or mock systems.
+* **Knowledge** powers the RAG pipeline.
+* **Domain & Schemas** define the application's shared data models.
+
+This separation makes the codebase easier to maintain, test, and extend. Adding a new agent or replacing a component typically affects only one layer, allowing the overall architecture to remain stable as the project grows.
+
+
+
