@@ -1256,1051 +1256,394 @@ No existing agent, service, or tool needs to be modified.
 ---
 
 
-# AI Incident Triage - Folder Structure Guide
+# 📁 app/
 
-This document explains the purpose of every folder and file in the project. Think of it as the architecture guide for anyone joining the project.
+## Purpose
 
----
-
-# Root Directory
-
-```text
-ai-incident-triage/
-```
-
-This is the root of the project. Everything inside is organized by responsibility so that the application remains modular, scalable, and easy to maintain.
-
----
-
-# app/
+The **application layer**. It contains the complete AI Incident Triage system including workflow orchestration, AI agents, business logic, RAG, and integrations.
 
 ```text
 app/
+├── main.py
+├── config.py
+└── dependencies.py
 ```
 
-This is the heart of the application.
-
-It contains all the application logic, LangGraph workflow, AI agents, services, business models, LLM integrations, and supporting modules.
+| File              | Purpose                                                                                |
+| ----------------- | -------------------------------------------------------------------------------------- |
+| `main.py`         | Starts the application and executes the LangGraph workflow.                            |
+| `config.py`       | Loads application configuration, environment variables, and settings.                  |
+| `dependencies.py` | Creates and manages shared dependencies like LLM, vector store, logger, and retriever. |
 
 ---
 
-# main.py
-
-```text
-app/main.py
-```
+# 📁 graph/
 
 ## Purpose
 
-Main entry point of the application.
+The **LangGraph orchestration layer**. It controls how an incident flows through the AI system.
 
-Responsible for:
+> **Responsibility:** Orchestrate the workflow (NOT AI reasoning).
 
-* Starting the application
-* Loading configuration
-* Building the LangGraph workflow
-* Receiving incident input
-* Returning the final incident report
+```text
+graph/
+├── workflow.py
+├── builder.py
+├── router.py
+├── state.py
+└── nodes/
+```
 
-Think of this as:
-
-> **Application Launcher**
+| File          | Purpose                                              |
+| ------------- | ---------------------------------------------------- |
+| `workflow.py` | Defines the complete AI Incident workflow.           |
+| `builder.py`  | Builds and compiles the LangGraph graph.             |
+| `router.py`   | Controls conditional routing between graph nodes.    |
+| `state.py`    | Defines the shared graph state passed between nodes. |
 
 ---
 
-# config.py
-
-```text
-app/config.py
-```
+# 📁 graph/nodes/
 
 ## Purpose
 
-Stores application configuration.
+Each file represents **one step (node)** in the LangGraph workflow.
 
-Examples
-
-* API Keys
-* Model Name
-* Vector Store Path
-* Confidence Threshold
-* Logging Configuration
-* Feature Flags
-
-Instead of writing
-
-```python
-os.getenv(...)
+```text
+nodes/
+├── ingestion.py
+├── classification.py
+├── impact.py
+├── severity.py
+├── investigation.py
+├── rca.py
+├── knowledge.py
+├── resolution.py
+├── approval.py
+├── verification.py
+├── report.py
+└── notification.py
 ```
 
-throughout the project, everything is centralized here.
+| File                | Purpose                                               |
+| ------------------- | ----------------------------------------------------- |
+| `ingestion.py`      | Receives and normalizes incoming incident data.       |
+| `classification.py` | Executes incident classification.                     |
+| `impact.py`         | Determines business impact.                           |
+| `severity.py`       | Determines incident priority (P1/P2/P3).              |
+| `investigation.py`  | Performs AI investigation using available evidence.   |
+| `rca.py`            | Determines the most probable root cause.              |
+| `knowledge.py`      | Retrieves similar incidents and runbooks using RAG.   |
+| `resolution.py`     | Generates recommended resolution steps.               |
+| `approval.py`       | Performs safety validation and human approval checks. |
+| `verification.py`   | Verifies whether the incident is resolved.            |
+| `report.py`         | Generates the final structured incident report.       |
+| `notification.py`   | Sends notifications to external systems.              |
 
 ---
 
-# dependencies.py
-
-```text
-app/dependencies.py
-```
+# 📁 agents/
 
 ## Purpose
 
-Creates shared objects used throughout the application.
+Contains all **AI reasoning agents**. Each agent performs exactly one AI task.
 
-Example
-
-* LLM instance
-* Embedding model
-* Vector Store
-* Logger
-* Knowledge Retriever
-
-Instead of creating them multiple times, the application reuses these objects.
-
----
-
-# graph/
-
-```text
-app/graph/
-```
-
-## Purpose
-
-Contains the **LangGraph workflow**.
-
-This folder controls **how the incident moves through the system**.
-
-It does **not** perform AI reasoning.
-
-It only controls
-
-```
-Where to go next
-```
-
----
-
-# workflow.py
-
-Defines the complete LangGraph workflow.
-
-Example
-
-```
-Input
-
-↓
-
-Classification
-
-↓
-
-Severity
-
-↓
-
-Investigation
-
-↓
-
-RCA
-
-↓
-
-Resolution
-
-↓
-
-Verification
-
-↓
-
-Report
-```
-
----
-
-# builder.py
-
-Creates the LangGraph object.
-
-Registers
-
-* Nodes
-* Edges
-* Conditional routing
-
----
-
-# router.py
-
-Contains decision-making logic.
-
-Example
-
-```
-Confidence > 80%
-
-↓
-
-Continue
-
-Else
-
-↓
-
-Re-investigate
-```
-
----
-
-# state.py
-
-Defines the shared state flowing between every node.
-
-Example
-
-```python
-Incident
-
-Classification
-
-Severity
-
-Impact
-
-Evidence
-
-Hypothesis
-
-Root Cause
-
-Resolution
-
-Report
-```
-
-Every node updates this object.
-
----
-
-# graph/nodes/
-
-```text
-graph/nodes/
-```
-
-Each file represents **one LangGraph node**.
-
-The node simply calls the appropriate service or AI agent.
-
-Example
-
-```
-classification.py
-
-↓
-
-Calls
-
-↓
-
-Classifier Agent
-```
-
-This keeps orchestration separate from reasoning.
-
----
-
-# agents/
+> **Responsibility:** Think, analyze, reason.
 
 ```text
 agents/
+├── base.py
+├── classifier/
+├── impact/
+├── severity/
+├── investigation/
+├── rca/
+├── resolution/
+├── report/
+└── notification/
 ```
+
+| File/Folder | Purpose                                                       |
+| ----------- | ------------------------------------------------------------- |
+| `base.py`   | Base class providing common LLM functionality for all agents. |
+
+---
+
+## 📁 classifier/
+
+```text
+classifier/
+├── agent.py
+├── prompt.py
+└── parser.py
+```
+
+| File        | Purpose                                      |
+| ----------- | -------------------------------------------- |
+| `agent.py`  | Classifies the incident type using the LLM.  |
+| `prompt.py` | Stores the classifier prompt template.       |
+| `parser.py` | Converts LLM output into structured objects. |
+
+---
+
+## 📁 impact/
+
+| File        | Purpose                                     |
+| ----------- | ------------------------------------------- |
+| `agent.py`  | Determines business impact of the incident. |
+| `prompt.py` | Prompt for impact analysis.                 |
+| `parser.py` | Parses impact analysis output.              |
+
+---
+
+## 📁 severity/
+
+| File        | Purpose                              |
+| ----------- | ------------------------------------ |
+| `agent.py`  | Predicts incident severity using AI. |
+| `prompt.py` | Prompt for severity analysis.        |
+| `parser.py` | Parses severity output.              |
+
+---
+
+## 📁 investigation/
+
+| File        | Purpose                                         |
+| ----------- | ----------------------------------------------- |
+| `agent.py`  | Investigates evidence and generates hypotheses. |
+| `prompt.py` | Prompt for investigation reasoning.             |
+| `parser.py` | Parses investigation results.                   |
+
+---
+
+## 📁 rca/
+
+| File        | Purpose                                            |
+| ----------- | -------------------------------------------------- |
+| `agent.py`  | Determines the root cause from collected evidence. |
+| `prompt.py` | Prompt for root cause analysis.                    |
+| `parser.py` | Parses RCA output.                                 |
+
+---
+
+## 📁 resolution/
+
+| File        | Purpose                                      |
+| ----------- | -------------------------------------------- |
+| `agent.py`  | Generates recommended troubleshooting steps. |
+| `prompt.py` | Prompt for resolution planning.              |
+| `parser.py` | Parses resolution output.                    |
+
+---
+
+## 📁 report/
+
+| File        | Purpose                                     |
+| ----------- | ------------------------------------------- |
+| `agent.py`  | Creates the final incident report.          |
+| `prompt.py` | Prompt for report generation.               |
+| `parser.py` | Parses the report into a structured format. |
+
+---
+
+## 📁 notification/
+
+| File        | Purpose                                    |
+| ----------- | ------------------------------------------ |
+| `agent.py`  | Generates notification messages.           |
+| `prompt.py` | Prompt for Slack/Jira/Teams notifications. |
+
+---
+
+# 📁 domain/
 
 ## Purpose
 
-Contains every AI Agent.
-
-Each agent performs one specific reasoning task.
-
-The graph calls agents.
-
-Agents never call the graph.
-
----
-
-# base.py
-
-Shared base class.
-
-Provides
-
-* LLM access
-* Prompt execution
-* Output parsing
-* Error handling
-
-Every agent inherits from this.
-
----
-
-# classifier/
-
-Responsible for identifying the incident category.
-
-Example
-
-```
-CrashLoopBackOff
-
-↓
-
-Kubernetes
-```
-
----
-
-# impact/
-
-Determines business impact.
-
-Example
-
-```
-Production
-
-↓
-
-Payment Service
-
-↓
-
-High Impact
-```
-
----
-
-# severity/
-
-Determines
-
-```
-P1
-
-P2
-
-P3
-```
-
-Uses
-
-* Rules
-* LLM reasoning
-
----
-
-# investigation/
-
-This is your AI Investigation Engineer.
-
-Responsibilities
-
-* Analyze incident evidence
-* Identify symptoms
-* Generate hypotheses
-* Identify missing evidence
-
-It never connects to a real Kubernetes cluster in your current project.
-
----
-
-# rca/
-
-Determines the most likely root cause.
-
-Example
-
-```
-Missing Secret
-
-Confidence 92%
-```
-
----
-
-# resolution/
-
-Generates step-by-step resolution.
-
-Example
-
-```
-Verify Secret
-
-Restart Deployment
-
-Validate Pods
-```
-
----
-
-# report/
-
-Creates the final structured incident report.
-
----
-
-# notification/
-
-Generates Slack/Jira/Teams notifications.
-
----
-
-# prompt.py
-
-Contains the prompt used by that agent.
-
-Each agent has its own prompt.
-
----
-
-# parser.py
-
-Converts raw LLM output into structured Pydantic objects.
-
-Never trust raw LLM responses.
-
----
-
-# domain/
+Contains the **core business models** shared across the application.
 
 ```text
 domain/
-```
-
-Contains the business objects used throughout the application.
-
-Think of these as the language of your business.
-
----
-
-# models/
-
-Defines all entities.
-
-Examples
-
-```
-Incident
-
-Evidence
-
-Hypothesis
-
-Severity
-
-Resolution
-
-Report
-```
-
-These models are shared everywhere.
-
----
-
-# enums/
-
-Stores fixed values.
-
-Example
-
-```
-Priority
-
-P1
-
-P2
-
-P3
-```
-
-instead of strings.
-
----
-
-# constants.py
-
-Stores constants used throughout the application.
-
-Example
-
-```
-Confidence Threshold
-
-Default Namespace
-
-Supported Categories
+├── models/
+├── enums/
+└── constants.py
 ```
 
 ---
 
-# services/
+## 📁 models/
 
-```text
-services/
-```
-
-Contains business logic.
-
-This folder answers
-
-```
-How should the application behave?
-```
-
-The services never know about prompts.
-
-They never know about LangGraph.
-
-They simply perform business operations.
-
-Example
-
-```
-Severity Service
-
-↓
-
-Uses rules
-
-↓
-
-Returns
-
-P1
-```
+| File              | Purpose                             |
+| ----------------- | ----------------------------------- |
+| `incident.py`     | Defines the Incident model.         |
+| `evidence.py`     | Represents investigation evidence.  |
+| `hypothesis.py`   | Represents possible causes.         |
+| `impact.py`       | Defines impact details.             |
+| `severity.py`     | Defines severity information.       |
+| `root_cause.py`   | Defines RCA details.                |
+| `resolution.py`   | Defines recommended actions.        |
+| `approval.py`     | Defines approval status.            |
+| `verification.py` | Defines verification results.       |
+| `report.py`       | Defines the final report structure. |
 
 ---
 
-# knowledge/
+## 📁 enums/
 
-```text
-knowledge/
-```
+| File               | Purpose                                |
+| ------------------ | -------------------------------------- |
+| `priority.py`      | Defines P1/P2/P3 priority values.      |
+| `incident_type.py` | Defines supported incident categories. |
+| `environment.py`   | Defines deployment environments.       |
+| `team.py`          | Defines ownership teams.               |
+| `status.py`        | Defines incident status values.        |
 
-Responsible for the RAG pipeline.
-
-Everything related to knowledge retrieval lives here.
-
----
-
-# loader.py
-
-Loads documents.
+| File           | Purpose                                |
+| -------------- | -------------------------------------- |
+| `constants.py` | Stores reusable application constants. |
 
 ---
 
-# chunker.py
+# 📁 services/
 
-Splits documents into chunks.
+## Purpose
 
----
+Contains **business logic** independent of AI.
 
-# embeddings.py
+> **Responsibility:** Execute business rules, calculations, and processing.
 
-Creates embeddings.
-
----
-
-# vector_store.py
-
-Stores embeddings.
-
----
-
-# retriever.py
-
-Retrieves relevant documents.
-
----
-
-# llm/
-
-```text
-llm/
-```
-
-Contains LLM abstraction.
-
-Never call Groq/OpenAI directly elsewhere.
+| File                        | Purpose                                           |
+| --------------------------- | ------------------------------------------------- |
+| `ingestion_service.py`      | Processes and normalizes incoming incidents.      |
+| `correlation_service.py`    | Correlates related alerts into a single incident. |
+| `classification_service.py` | Business logic for classification.                |
+| `impact_service.py`         | Calculates business impact.                       |
+| `severity_service.py`       | Applies severity rules.                           |
+| `hypothesis_service.py`     | Manages investigation hypotheses.                 |
+| `evidence_service.py`       | Processes incident evidence.                      |
+| `rca_service.py`            | Performs root cause analysis logic.               |
+| `recommendation_service.py` | Generates recommended actions.                    |
+| `approval_service.py`       | Performs approval validation.                     |
+| `verification_service.py`   | Verifies incident resolution.                     |
+| `report_service.py`         | Builds the final report.                          |
+| `notification_service.py`   | Creates notification payloads.                    |
 
 ---
 
-# factory.py
+# 📁 knowledge/
 
-Returns the configured LLM.
+## Purpose
 
-Example
+Implements the **Retrieval-Augmented Generation (RAG)** pipeline.
 
-```
-Groq
-
-OpenAI
-
-Anthropic
-
-Gemini
-```
-
-One interface.
+| File              | Purpose                                     |
+| ----------------- | ------------------------------------------- |
+| `loader.py`       | Loads knowledge documents.                  |
+| `chunker.py`      | Splits documents into chunks.               |
+| `embeddings.py`   | Creates embeddings for documents.           |
+| `vector_store.py` | Stores document embeddings.                 |
+| `retriever.py`    | Retrieves relevant documents for AI agents. |
 
 ---
 
-# providers/
+# 📁 llm/
 
-Each provider implementation.
+## Purpose
 
-Easy to switch models.
+Provides a unified interface for all supported LLM providers.
 
----
+| File                   | Purpose                                          |
+| ---------------------- | ------------------------------------------------ |
+| `factory.py`           | Creates the configured LLM instance.             |
+| `structured_output.py` | Converts raw LLM output into structured objects. |
 
-# structured_output.py
+### 📁 providers/
 
-Converts LLM output into structured objects.
-
----
-
-# prompts/
-
-```text
-prompts/
-```
-
-Stores every prompt outside Python code.
-
-Makes prompt engineering easier.
+| File           | Purpose                |
+| -------------- | ---------------------- |
+| `groq.py`      | Groq LLM integration.  |
+| `openai.py`    | OpenAI integration.    |
+| `anthropic.py` | Anthropic integration. |
+| `gemini.py`    | Gemini integration.    |
 
 ---
 
-# shared/
+# 📁 prompts/
 
-Reusable prompts.
+## Purpose
 
-Example
+Stores all prompt templates separately from Python code.
 
-```
-System Prompt
+### 📁 shared/
 
-Output Format
+| File                | Purpose                                          |
+| ------------------- | ------------------------------------------------ |
+| `system_prompt.txt` | Global system instructions shared by all agents. |
+| `output_format.txt` | Standard output format for AI responses.         |
+| `guardrails.txt`    | AI safety and behavior guidelines.               |
 
-Guardrails
-```
+### 📁 templates/
 
----
+Each file contains the prompt template for its corresponding AI agent.
 
-# templates/
-
-Agent-specific prompts.
-
-Example
-
-```
-Classifier
-
-Investigation
-
-RCA
-
-Resolution
-```
+| File                | Purpose                         |
+| ------------------- | ------------------------------- |
+| `classifier.txt`    | Incident classification prompt. |
+| `impact.txt`        | Impact assessment prompt.       |
+| `severity.txt`      | Severity analysis prompt.       |
+| `investigation.txt` | Investigation prompt.           |
+| `rca.txt`           | Root cause analysis prompt.     |
+| `resolution.txt`    | Resolution planning prompt.     |
+| `report.txt`        | Report generation prompt.       |
+| `notification.txt`  | Notification generation prompt. |
 
 ---
 
-# tools/
+# 📁 tools/
 
-```text
-tools/
-```
+## Purpose
 
-Represents external systems.
+Provides access to external or mock systems.
 
-Tools gather information.
+### 📁 mock/
 
-They do not perform reasoning.
+Contains mock implementations for development.
 
----
+| File             | Purpose                          |
+| ---------------- | -------------------------------- |
+| `logs.py`        | Provides mock application logs.  |
+| `metrics.py`     | Provides mock metrics.           |
+| `deployments.py` | Provides mock deployment data.   |
+| `events.py`      | Provides mock Kubernetes events. |
+| `alerts.py`      | Provides mock alert data.        |
 
-# mock/
+### 📁 adapters/
 
-Contains mock implementations.
+Contains real production integrations.
 
-Example
-
-```
-Mock Logs
-
-Mock Events
-
-Mock Metrics
-
-Mock Deployments
-```
-
-Used for your project.
-
----
-
-# adapters/
-
-Real implementations.
-
-Future examples
-
-```
-Kubernetes API
-
-Prometheus
-
-CloudWatch
-
-Slack
-
-Jira
-```
-
-Currently unused but production-ready.
+| File            | Purpose                     |
+| --------------- | --------------------------- |
+| `kubernetes.py` | Kubernetes API integration. |
+| `prometheus.py` | Prometheus integration.     |
+| `cloudwatch.py` | CloudWatch integration.     |
+| `jira.py`       | Jira integration.           |
+| `slack.py`      | Slack integration.          |
+| `servicenow.py` | ServiceNow integration.     |
 
 ---
 
-# rules/
-
-```text
-rules/
-```
-
-Contains deterministic rules.
-
-Never ask an LLM something that can be implemented with code.
-
-Example
-
-```
-Production
-
-+
-
-Payment
-
-↓
-
-Always P1
-```
-
----
-
-# guardrails/
-
-```text
-guardrails/
-```
-
-Protects the AI.
-
-Examples
-
-* Prompt injection prevention
-* Domain validation
-* Safety checks
-* Input validation
-
----
-
-# repositories/
-
-```text
-repositories/
-```
-
-Responsible for reading and writing data.
-
-Today
-
-```
-JSON
-```
-
-Tomorrow
-
-```
-PostgreSQL
-
-MongoDB
-
-S3
-```
-
-Nothing else changes.
-
----
-
-# schemas/
-
-```text
-schemas/
-```
-
-Contains API contracts.
-
-Defines
-
-* Requests
-* Responses
-* Graph State
-* Tool Outputs
-
-Keeps communication consistent.
-
----
-
-# utils/
-
-```text
-utils/
-```
-
-Common reusable helpers.
-
-Examples
-
-* Logging
-* JSON utilities
-* Time formatting
-* Confidence calculations
-
----
-
-# telemetry/
-
-```text
-telemetry/
-```
-
-Observability.
-
-Responsible for
-
-* LangSmith tracing
-* Performance metrics
-* Execution tracing
-
-Useful during development and debugging.
-
----
-
-# knowledge_base/
-
-```text
-knowledge_base/
-```
-
-Stores the documents used for RAG.
-
-Examples
-
-```
-Runbooks
-
-SOPs
-
-Postmortems
-
-Previous Incidents
-
-Kubernetes Guides
-```
-
-These are indexed into the vector database.
-
----
-
-# data/
-
-```text
-data/
-```
-
-Contains application data.
-
----
-
-# incidents/
-
-Mock incidents.
-
-Example
-
-```
-CrashLoopBackOff
-
-ImagePullBackOff
-
-503
-
-Database Timeout
-```
-
-These simulate production incidents.
-
----
-
-# outcomes/
-
-Mock verification data.
-
-Example
-
-```
-Resolved
-
-Unresolved
-```
-
-Used by the Verification Agent.
-
----
-
-# reports/
-
-Stores generated reports.
-
-Useful for demos and future auditing.
-
----
-
-# scripts/
-
-```text
-scripts/
-```
-
-Utility scripts.
-
-These are one-time or maintenance tasks.
-
-Examples
-
-```
-Seed mock data
-
-Build vector store
-
-Ingest documents
-```
-
----
-
-# .env.example
-
-Template showing all required environment variables.
-
-Never commit the real `.env`.
-
----
-
-# .gitignore
-
-Defines files Git should ignore.
-
-Example
-
-```
-__pycache__
-
-.env
-
-venv
-
-logs
-```
-
----
-
-# pyproject.toml
-
-Modern Python project configuration.
-
-Contains
-
-* Project metadata
-* Dependencies (if using modern packaging)
-* Tool configuration (formatter, linter, etc.)
-
----
-
-# requirements.txt
-
-Lists Python package dependencies.
-
-Useful for simple installation.
-
----
-
-# README.md
-
-The project's primary documentation.
-
-Should include:
-
-* Project overview
-* Architecture diagram
-* Folder structure
-* Installation steps
-* Configuration
-* Running the project
-* Sample incident input/output
-* Team contribution guide
-
----
-
-# LICENSE
-
-Specifies how others may use, modify, and distribute the project.
-
----
-
-# Overall Architecture Mapping
-
-| Architecture Step         | Project Folder                                                                            |
-| ------------------------- | ----------------------------------------------------------------------------------------- |
-| Incident Input            | `data/`, `tools/mock/`                                                                    |
-| Incident Ingestion        | `graph/nodes/ingestion.py`, `services/ingestion_service.py`                               |
-| Incident Classification   | `agents/classifier/`, `services/classification_service.py`                                |
-| Impact Assessment         | `agents/impact/`, `services/impact_service.py`                                            |
-| Severity Engine           | `agents/severity/`, `rules/severity.py`, `services/severity_service.py`                   |
-| Investigation             | `agents/investigation/`, `services/evidence_service.py`, `services/hypothesis_service.py` |
-| RCA                       | `agents/rca/`, `services/rca_service.py`                                                  |
-| Knowledge Retrieval (RAG) | `knowledge/`, `knowledge_base/`                                                           |
-| Resolution Planning       | `agents/resolution/`, `services/recommendation_service.py`                                |
-| Safety & Approval         | `guardrails/`, `services/approval_service.py`                                             |
-| Verification              | `graph/nodes/verification.py`, `services/verification_service.py`                         |
-| Incident Report           | `agents/report/`, `services/report_service.py`                                            |
-| Notifications             | `agents/notification/`, `services/notification_service.py`, `tools/adapters/`             |
-
-## Design Philosophy
-
-The project follows a layered architecture with clear separation of concerns:
-
-* **Graph** orchestrates the workflow.
-* **Agents** perform AI reasoning.
-* **Services** implement business logic.
-* **Rules** contain deterministic decisions.
-* **Tools** interact with external or mock systems.
-* **Knowledge** powers the RAG pipeline.
-* **Domain & Schemas** define the application's shared data models.
-
-This separation makes the codebase easier to maintain, test, and extend. Adding a new agent or replacing a component typically affects only one layer, allowing the overall architecture to remain stable as the project grows.
-
-
+The remaining folders follow the same pattern:
+
+| Folder            | Purpose                                                                               |
+| ----------------- | ------------------------------------------------------------------------------------- |
+| `rules/`          | Stores deterministic business rules (severity, ownership, confidence).                |
+| `guardrails/`     | Implements AI safety, validation, and prompt protection.                              |
+| `repositories/`   | Handles reading and writing application data.                                         |
+| `schemas/`        | Defines request, response, and graph state schemas.                                   |
+| `utils/`          | Contains reusable helper utilities used across the project.                           |
+| `telemetry/`      | Provides LangSmith tracing, logging, and application metrics.                         |
+| `knowledge_base/` | Stores runbooks, SOPs, postmortems, and documents used by RAG.                        |
+| `data/`           | Contains mock incidents, verification outcomes, and generated reports.                |
+| `scripts/`        | Utility scripts for seeding data, building the vector store, and ingesting knowledge. |
+
+This documentation style is commonly used in production repositories because a new developer can understand the purpose of every folder and file without reading the implementation.
 
