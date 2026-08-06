@@ -1,1 +1,1 @@
-# TODO: investigation agent prompt template
+# TODO: investigation orchestrator prompt

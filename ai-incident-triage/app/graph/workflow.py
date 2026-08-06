@@ -1,0 +1,1 @@
+# LangGraph workflow. v2 flow: ingestion -> classification (category + severity) -> investigation (parallel sub-agents) -> investigation_summary -> rca_report -> approval -> verification -> notification. verification: resolved -> notify; unresolved -> loop back to investigation.
