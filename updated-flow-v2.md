@@ -1,6 +1,9 @@
 **Updated Folder Structure**
 
 
+# AI Incident Triage - Project Structure
+
+```text
 ai-incident-triage/
 │
 ├── app/
@@ -208,8 +211,7 @@ ai-incident-triage/
 ├── requirements.txt
 ├── README.md
 └── LICENSE
-
-
+```
 
 
 **Flow**
