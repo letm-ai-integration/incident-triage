@@ -18,3 +18,11 @@ uv sync
 ```bash
 uv run pytest
 ```
+
+## Graph infrastructure
+
+The project ships a reusable LangGraph builder in `app/graph/builder.py`
+(public API: `createGraph`, `addNode`, `addEdge`, `addConditionalEdge`,
+`compileGraph`), re-exported from `app.graph`. Application assembly lives in
+`app/graph/workflow.py`. See `docs/GRAPH_BUILDER.md` for usage, agent
+composition and testing guidance.
