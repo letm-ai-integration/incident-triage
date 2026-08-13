@@ -7,6 +7,8 @@ from app.llm.client import (
     get_chat_model,
     get_client,
 )
+from .factory import LLMFactory
+from .structured_output import StructuredOutputParser, OutputParsingError
 
 __all__ = [
     "async_chat_completion",
@@ -15,4 +17,7 @@ __all__ = [
     "create_structured_agent",
     "get_chat_model",
     "get_client",
+    "LLMFactory",
+    "StructuredOutputParser",
+    "OutputParsingError",
 ]

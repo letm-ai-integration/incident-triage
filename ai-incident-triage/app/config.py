@@ -10,12 +10,14 @@
 #
 # The OpenRouter endpoint is intentionally NOT configurable via the
 # environment; it lives inside the provider (app/llm/providers/openrouter.py).
+import os
+from functools import lru_cache
 from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
-
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -26,11 +28,25 @@ class Settings(BaseSettings):
 
     openrouter_api_key: str = ""
     openrouter_model: str = "deepseek/deepseek-v4-flash"
+    
+    # LLM Settings (Groq)
+    groq_api_key: str = Field(default="")
+    groq_model_name: str = Field(default="llama-3.3-70b-versatile")
+    default_llm_provider: str = Field(default="groq")
+    
+    # Observability
+    langchain_tracing_v2: bool = Field(default=True)
+    langsmith_api_key: str = Field(default="")
+    langsmith_project: str = Field(default="incident-triage-ai")
+    
+    # App Settings
+    knowledge_base_path: str = Field(default="knowledge_base")
+    max_investigation_retries: int = Field(default=3)
 
 
 settings = Settings()
 
-
+@lru_cache()
 def get_settings() -> Settings:
     """Return the application settings singleton."""
     return settings

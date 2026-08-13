@@ -1,1 +1,7 @@
-# TODO: shared output format specification for all agents
+OUTPUT FORMAT REQUIREMENTS:
+1. You must respond with a SINGLE valid JSON object.
+2. Do not include markdown code fences (like ```json ... ```).
+3. Do not include any preamble, introduction, or trailing commentary.
+4. The JSON must exactly match the schema provided in the task instructions.
+5. Ensure all required fields are present.
+6. If a value is unknown or not applicable, use null instead of inventing data.

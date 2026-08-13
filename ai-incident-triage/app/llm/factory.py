@@ -11,6 +11,8 @@
 #   get_llm("openai", ...)  -> OpenAI provider (registered, not yet implemented)
 import importlib
 from typing import Any
+from langchain_core.language_models.chat_models import BaseChatModel
+from app.config import Settings
 
 _PROVIDER_MODULES: dict[str, str] = {
     "openrouter": "app.llm.providers.openrouter",
@@ -47,3 +49,30 @@ def get_llm(
             f"LLM provider {provider!r} is registered but does not implement get_chat_model() yet"
         )
     return factory_fn(model=model, temperature=temperature, **kwargs)
+
+class LLMFactory:
+    """
+    Factory for creating LLM instances based on configuration.
+    """
+    
+    @staticmethod
+    def create(settings: Settings, provider: str = None) -> BaseChatModel:
+        """
+        Create a new LLM instance.
+        If provider is not specified, uses the default from settings.
+        """
+        # Local import to prevent circular dependency if groq.py imports from here
+        from app.llm.providers.groq import create_groq_llm
+        
+        provider_name = provider or settings.default_llm_provider
+        provider_name = provider_name.lower()
+        
+        if provider_name == "groq":
+            return create_groq_llm(settings)
+        elif provider_name == "openrouter":
+            return get_llm("openrouter", temperature=0)
+        # We will implement other providers (openai, anthropic, gemini) later.
+        elif provider_name in ("openai", "anthropic", "gemini"):
+            raise NotImplementedError(f"Provider {provider_name} is not yet implemented in LLMFactory.")
+        else:
+            raise ValueError(f"Unknown LLM provider: {provider_name}")

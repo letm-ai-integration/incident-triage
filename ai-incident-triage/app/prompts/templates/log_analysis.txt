@@ -1,1 +1,43 @@
-# TODO: log analysis sub-agent prompt
+TASK:
+Analyze the provided application and system logs to identify errors, anomalies, and patterns relevant to the current incident.
+
+WHAT TO LOOK FOR:
+- Specific error messages and stack traces (especially those matching the incident timeframe)
+- Cascading failures (e.g., timeouts leading to connection pool exhaustion)
+- Spikes in error frequency
+- Anomalies in log frequency or unusual warnings
+
+OUTPUT SCHEMA:
+You must output a JSON object with the following structure:
+{
+  "evidence": [
+    {
+      "evidence_id": "string (unique identifier for this piece of evidence, e.g. LOG-001)",
+      "source": "log_analysis",
+      "finding": "string (clear description of what was found)",
+      "severity": "string (HIGH/MEDIUM/LOW)",
+      "raw_data": { "log_message": "...", "timestamp": "..." }
+    }
+  ],
+  "hypotheses": [
+    {
+      "hypothesis_id": "string (unique identifier, e.g. HYP-001)",
+      "description": "string (what you believe caused the issue)",
+      "confidence": float (0.0 to 1.0),
+      "supporting_evidence": ["string (list of evidence_ids supporting this)"],
+      "contradicting_evidence": ["string (list of evidence_ids contradicting this)"],
+      "label": "string (LIKELY, POSSIBLE, or UNLIKELY)"
+    }
+  ],
+  "summary": "string (brief 1-2 sentence summary of log analysis findings)"
+}
+
+INPUT DATA:
+
+<<<INCIDENT_DATA>>>
+{incident_data}
+<<<END_INCIDENT_DATA>>>
+
+<<<LOG_DATA>>>
+{log_data}
+<<<END_LOG_DATA>>>
