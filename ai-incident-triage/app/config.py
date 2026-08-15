@@ -44,6 +44,11 @@ class Settings(BaseSettings):
     llm_max_tokens: int = 2048
     llm_timeout: int = 60
 
+    # Local embedding model + FAISS vector store (mirrors the rag-qna-bot-poc
+    # stack: sentence-transformers/all-MiniLM-L6-v2, embedded, no API key).
+    embedding_model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
+    vector_store_path: str = "vectorstore"
+
     def active_llm_config(self) -> dict:
         """Single source of truth for which provider is active and its settings."""
         if self.llm_provider == LLMProvider.GROQ:

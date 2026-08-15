@@ -8,7 +8,9 @@
 # nodes only ever return keys declared on this TypedDict. Where a concept has an
 # existing domain model or enum, the field references it directly instead of
 # re-declaring a parallel inline definition.
-from typing import TypedDict, List, Optional
+from dataclasses import dataclass
+from enum import Enum
+from typing import Optional, TypedDict
 
 from app.domain.enums.incident_type import IncidentType
 from app.domain.enums.priority import Priority
@@ -21,6 +23,21 @@ from app.domain.models.incident import Incident
 from app.domain.models.report import IncidentReport
 from app.domain.models.root_cause import RootCauseAnalysis
 from app.domain.models.verification import VerificationResult
+
+
+class RunbookStatus(str, Enum):
+    MATCHED = "MATCHED"
+    NO_MATCH = "NO_MATCH"
+    ERROR = "ERROR"
+
+
+@dataclass
+class RunbookResult:
+    status: RunbookStatus
+    hypothesis: Optional["Hypothesis"] = None
+    error: str | None = None
+    matched_title: str | None = None
+    score: float | None = None
 
 
 class IncidentState(TypedDict, total=False):
@@ -39,8 +56,8 @@ class IncidentState(TypedDict, total=False):
 
     # 3. Investigation
     investigation_status: IncidentStatus
-    evidence: List[Evidence]
-    hypotheses: List[Hypothesis]
+    evidence: list[Evidence]
+    hypotheses: list[Hypothesis]
 
     # Parallel Investigation Results
     log_analysis: Evidence
@@ -63,7 +80,7 @@ class IncidentState(TypedDict, total=False):
     # 7. Workflow Control
     retry_count: int
     current_step: str
-    errors: List[str]
+    errors: list[str]
 
     # 8. Approval
     approval: ApprovalDecision

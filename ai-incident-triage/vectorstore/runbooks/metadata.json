@@ -1,0 +1,42 @@
+[
+  {
+    "id": "knowledge_base/runbooks/runbook.md::0::High API Failures",
+    "text": "## High API Failures\n\n**Alert:** More than 10 HTTP 5xx errors per minute (aggregate)\n**Severity:** Critical\n**Routing:** prodCritical / preProdCritical\n\n**Impact:**\n- Users seeing error pages\n- Failed transactions\n- Payment/cart failures\n- Elevated support ticket volume\n\n**RCA Path:**\n1. Check the API gateway dashboard for which endpoint(s) are failing.\n2. Check recent deployments — correlate failure onset with any release in\n   the last 30 minutes.\n3. Check upstream dependency health (DB, cache, third-party APIs) for\n   simultaneous degradation.\n4. Check pod-level logs for the failing service for stack traces/error\n   patterns.\n\n**Solution:**\n- If correlated with a deployment: roll back immediately.\n- If correlated with an upstream dependency: fail over or apply circuit\n  breaker if configured; escalate to the owning team.\n- If neither: escalate to on-call backend engineer with gathered evidence\n  above.\n\n---",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/runbook.md",
+      "title": "High API Failures"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/runbook.md::1::Pod CrashLoopBackOff (OOMKilled)",
+    "text": "## Pod CrashLoopBackOff (OOMKilled)\n\n**Alert:** Pod restart count > 5 within 10 minutes, termination reason\nOOMKilled\n**Severity:** High\n**Routing:** platformOnCall\n\n**Impact:**\n- Reduced service capacity\n- Potential request failures during restart windows\n\n**RCA Path:**\n1. `kubectl describe pod <pod>` — confirm OOMKilled as termination reason.\n2. Check memory usage trend over last 24h — gradual climb (leak) vs.\n   sudden spike (traffic burst).\n3. Cross-reference recent deployments.\n\n**Solution:**\n- Roll back to last known-good image if deployment-correlated.\n- If gradual leak: raise memory limit as temporary mitigation, file a\n  follow-up ticket for the leak itself.\n\n---",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/runbook.md",
+      "title": "Pod CrashLoopBackOff (OOMKilled)"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/runbook.md::2::ImagePullBackOff",
+    "text": "## ImagePullBackOff\n\n**Alert:** Pod stuck in ImagePullBackOff — image cannot be pulled\n**Severity:** Medium\n**Routing:** platformOnCall\n\n**Impact:**\n- New pods fail to start, capacity drops\n- Deployments cannot roll out new versions\n\n**RCA Path:**\n1. `kubectl describe pod <pod>` — read the image pull failure reason.\n2. Verify the image tag exists in the registry (`docker manifest inspect`\n   or the registry UI).\n3. Verify the cluster's registry credentials — expired or missing\n   `imagePullSecrets` are the most common cause.\n4. Check for a typo in the image tag (wrong tag, missing `:`).\n\n**Solution:**\n- Fix the image tag/reference in the deployment manifest and re-apply.\n- If credentials issue: rotate/update `imagePullSecrets` and patch the\n  deployment; they propagate to new pods automatically on restart.\n\n---",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/runbook.md",
+      "title": "ImagePullBackOff"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/runbook.md::3::HTTP 503 Service Unavailable",
+    "text": "## HTTP 503 Service Unavailable\n\n**Alert:** HTTP 503 responses exceeding 5% of request volume for 5 minutes\n**Severity:** High\n**Routing:** prodCritical\n\n**Impact:**\n- Downstream callers receive service-unavailable errors\n- Failed user requests and retries\n\n**RCA Path:**\n1. Confirm which service/path returns 503 — check gateway and ingress logs.\n2. Check the target service's readiness/liveness probes — failing probes\n   mean no healthy endpoints behind the load balancer.\n3. Check pod status and restart counts for the affected service.\n4. Check upstream dependencies (DB connection pool, cache) for exhaustion.\n\n**Solution:**\n- If probes are failing: fix the readiness check or the underlying\n  dependency the probe depends on.\n- If capacity is exhausted: scale the deployment; check for a leak/burst in\n  upstream connections.\n- If the dependency (DB/cache) is the source: resolve or fail over that\n  dependency first.\n\n---",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/runbook.md",
+      "title": "HTTP 503 Service Unavailable"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/runbook.md::4::Database Connection Pool Exhausted",
+    "text": "## Database Connection Pool Exhausted\n\n**Alert:** Database connection pool at 100% utilization, connection\nacquisition timeouts\n**Severity:** Critical\n**Routing:** prodCritical / databaseOnCall\n\n**Impact:**\n- Application threads block waiting for connections\n- Spikes in request latency and 5xx errors\n- Cascading service degradation as more services contend for connections\n\n**RCA Path:**\n1. Check connection-pool metrics (active/idle/waiting) on the affected\n   service.\n2. Look for connection leaks — unclosed connections in long-running\n   requests are a common cause.\n3. Correlate with any recent deployment or traffic spike.\n4. Check DB server limits and per-user max connections.\n\n**Solution:**\n- Restart/scale the affected application to release leaked connections.\n- If traffic burst: raise the pool max size if the database can sustain it.\n- If leaked connections persist: roll back the release that introduced the\n   leak and file a follow-up bug.\n- If DB server-level limit: tune max_connections and review per-service\n  allowances.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/runbook.md",
+      "title": "Database Connection Pool Exhausted"
+    }
+  }
+]
