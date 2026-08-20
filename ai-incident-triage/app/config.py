@@ -49,6 +49,13 @@ class Settings(BaseSettings):
     embedding_model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
     vector_store_path: str = "vectorstore"
 
+    # Email notifications (Resend). RESEND_API_KEY is optional so the app
+    # still works without email configured; the adapter raises when it is set
+    # to send without a key.
+    resend_api_key: str | None = None
+    resend_from_email: str = "alerts@yourdomain.com"
+    resend_from_name: str = "Incident Triage Bot"
+
     def active_llm_config(self) -> dict:
         """Single source of truth for which provider is active and its settings."""
         if self.llm_provider == LLMProvider.GROQ:
