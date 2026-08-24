@@ -61,6 +61,6 @@ ingestion script first, not that the search legitimately came up empty.
 |---|---|---|
 | `runbooks` | `knowledge_base/runbooks/runbook.md` | `agents/investigation/runbook` |
 | `logs` | *(not yet created)* | *(future logs agent)* |
-| `k8s` | *(not yet created)* | *(future kubernetes agent)* |
+| `k8s` | `knowledge_base/kubernetes/pod-crash.md` | `agents/investigation/kubernetes` |
 
 Update this table when you add a new collection.
