@@ -1,47 +1,38 @@
 {
-  "incident_id": "INC-003",
-  "incident_type": "DATABASE",
-  "title": "DB connection pool exhaustion on order-service",
-  "description": "HikariPool-1 on order-service reached 100% utilization with rising waiter count and 30s acquisition timeouts. No slow queries on the primary; traffic was flat, indicating leaked/unreturned connections.",
-  "source": "mock",
-  "service": "order-service",
+  "incident_id": "INC-DB-1001",
+  "title": "Checkout database connection pool exhausted",
+  "description": "Customers on the checkout page are seeing intermittent 'unable to complete order' errors. Application logs show the checkout service repeatedly failing to acquire a connection from the primary database pool during a traffic spike.",
+  "source": "pagerduty",
+  "service": "checkout-db",
   "environment": "PRODUCTION",
   "priority_hint": "P1",
-  "tags": [
-    "order-service",
-    "prod",
-    "v4.0.2"
+  "tags": ["database", "checkout", "connection-pool", "timeout"],
+  "timestamp": "2026-08-24T09:14:32+00:00",
+  "logs": [
+    "2026-08-24T09:12:01Z ERROR checkout-service: Database connection pool exhausted, unable to acquire connection after 30000ms",
+    "2026-08-24T09:12:04Z WARN  checkout-service: Connection wait queue depth = 214, exceeds threshold of 50",
+    "2026-08-24T09:12:07Z ERROR checkout-service: Database connection pool exhausted, unable to acquire connection after 30000ms",
+    "2026-08-24T09:12:15Z ERROR checkout-db: FATAL: remaining connection slots are reserved for non-replication superuser connections",
+    "2026-08-24T09:13:02Z ERROR checkout-service: Timeout waiting for connection from pool [checkout-primary]",
+    "2026-08-24T09:13:45Z INFO  checkout-service: Retrying order submission, attempt 2/3",
+    "2026-08-24T09:14:10Z ERROR checkout-service: Order submission failed after 3 retries: connection pool exhausted"
   ],
-  "timestamp": "2026-08-06T10:14:00.000Z",
-  "raw_logs": [],
-  "raw_events": [],
-  "raw_alerts": [
-    {
-      "alert_name": "DbConnectionPoolExhausted",
-      "severity": "critical",
-      "fired_at": "2026-08-06T10:21:00.000Z",
-      "labels": {
-        "service": "order-service",
-        "namespace": "prod"
-      }
-    }
+  "events": [
+    {"type": "deployment", "service": "checkout-service", "timestamp": "2026-08-24T08:55:00+00:00", "description": "Rolled out checkout-service v2.14.0 (raised default query timeout, no pool size change)"},
+    {"type": "traffic_spike", "service": "checkout-service", "timestamp": "2026-08-24T09:05:00+00:00", "description": "Request rate 4.2x above 7-day baseline (flash sale campaign)"}
   ],
-  "raw_metrics": {},
+  "alerts": [
+    {"name": "DatabaseConnectionPoolSaturation", "severity": "critical", "fired_at": "2026-08-24T09:12:00+00:00"}
+  ],
+  "metrics": {
+    "db_pool_active_connections": 100,
+    "db_pool_max_connections": 100,
+    "db_pool_wait_queue_depth": 214,
+    "checkout_error_rate_pct": 37.5,
+    "requests_per_second": 842
+  },
   "metadata": {
-    "scenario_id": "INC-003",
-    "pod_prefix": "order-service",
-    "deploy_version": "v4.0.2",
-    "trace_id_prefix": "c0ffee01",
-    "time_window": {
-      "onset": "2026-08-06T10:14:00.000Z",
-      "escalation": "2026-08-06T10:21:00.000Z",
-      "peak": "2026-08-06T10:28:00.000Z",
-      "resolution": "2026-08-06T10:36:00.000Z"
-    },
-    "data_sources": [
-      "logs_traces",
-      "db_logs",
-      "metrics"
-    ]
+    "region": "ap-southeast-2",
+    "on_call_team": "DBA"
   }
 }

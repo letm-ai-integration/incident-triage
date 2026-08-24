@@ -7,18 +7,27 @@ links, a visible rule-vs-LLM severity-agreement indicator, and hypotheses
 visually distinguished by label so an unconfirmed guess is never mistaken
 for a fact.
 
-This module does not call an LLM -- it only assembles/renders what the
-Classification, investigation sub-agents, and RCA & Report agent
-(app/agents/rca_report/agent.py) already produced.
+``build_incident_report``/``render_markdown_report`` below do not call an LLM --
+they only assemble/render what the Classification, investigation sub-agents,
+and RCA & Report agent (app/agents/rca_report/agent.py) already produced.
+
+``rca_report_service`` at the bottom is the graph-node adapter: it matches the
+``(state, deps) -> dict`` calling convention every node in app/graph/nodes/
+uses (see rca_report_node's ``deps.get("rca_report_service", _default_rca_report)``),
+so injecting it via ``deps`` swaps the node from its rule-based fallback to the
+real LLM-backed RCA agent with no change to the graph itself.
 """
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 
+from app.agents.rca_report.agent import generate_root_cause_analysis
 from app.domain.models.approval import ApprovalDecision
 from app.domain.models.classification import ClassificationResult
 from app.domain.models.evidence import EvidenceCollection
 from app.domain.models.hypothesis import Hypothesis, HypothesisLabel
+from app.domain.models.incident import Incident
 from app.domain.models.report import IncidentReport, RunbookReference
 from app.domain.models.root_cause import RootCauseAnalysis
 from app.domain.models.verification import VerificationResult
@@ -210,3 +219,43 @@ def _render_approval(approval: ApprovalDecision) -> str:
         f"- **Comments:** {approval.comments}\n"
         f"- **Timestamp:** {approval.timestamp.isoformat()}"
     )
+
+
+def rca_report_service(state: dict[str, Any], deps: dict[str, Any]) -> dict[str, Any]:
+    """Graph-node adapter for ``deps["rca_report_service"]``.
+
+    Drop-in replacement for ``app.graph.nodes.rca_report._default_rca_report``
+    that uses the real LLM-backed RCA agent instead of picking the top
+    hypothesis by raw confidence.
+    """
+    incident: Incident = state["incident"]
+    classification: ClassificationResult = state["classification"]
+    evidence_items = state.get("evidence", [])
+    hypotheses = state.get("hypotheses", [])
+    summary = state.get("investigation_summary") or {}
+    evidence = EvidenceCollection(
+        items=evidence_items,
+        summary=summary.get("summary", f"{len(evidence_items)} evidence item(s) collected"),
+    )
+
+    root_cause = generate_root_cause_analysis(
+        incident, classification, evidence, hypotheses, model=deps.get("rca_model")
+    )
+    report = build_incident_report(
+        incident_id=state.get("incident_id") or incident.incident_id,
+        classification=classification,
+        evidence=evidence,
+        hypotheses=hypotheses,
+        root_cause=root_cause,
+        verification=VerificationResult(is_resolved=False, needs_reinvestigation=True),
+    )
+    expected_outcome = {
+        "expectation": f"Incident resolved by addressing '{root_cause.primary_cause.description}'.",
+        "action": f"Apply the recommended fix for '{root_cause.primary_cause.description}' and confirm recovery.",
+    }
+    return {
+        "root_cause": root_cause,
+        "rca_confidence": root_cause.confidence_score,
+        "incident_report": report,
+        "expected_outcome": expected_outcome,
+    }

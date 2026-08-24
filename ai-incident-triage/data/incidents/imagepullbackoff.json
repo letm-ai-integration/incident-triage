@@ -1,1 +1,37 @@
-{}
+{
+  "incident_id": "INC-K8S-2044",
+  "title": "Orders API pods stuck in ImagePullBackOff after deploy",
+  "description": "The orders-api rollout to v3.8.1 is stuck: new pods are failing to start and are cycling between ErrImagePull and ImagePullBackOff. Old pods are still serving traffic but the deployment cannot progress and no further scaling is possible.",
+  "source": "kubernetes",
+  "service": "orders-api",
+  "environment": "PRODUCTION",
+  "priority_hint": "P2",
+  "tags": ["kubernetes", "deployment", "imagepullbackoff", "orders"],
+  "timestamp": "2026-08-24T14:02:18+00:00",
+  "logs": [
+    "2026-08-24T14:00:03Z Warning  Failed     pod/orders-api-7f9c8b6d4-abcde  Failed to pull image \"registry.internal/orders-api:v3.8.1\": rpc error: code = Unknown desc = failed to resolve reference: unauthorized",
+    "2026-08-24T14:00:03Z Warning  Failed     pod/orders-api-7f9c8b6d4-abcde  Error: ErrImagePull",
+    "2026-08-24T14:00:18Z Normal   BackOff    pod/orders-api-7f9c8b6d4-abcde  Back-off pulling image \"registry.internal/orders-api:v3.8.1\"",
+    "2026-08-24T14:00:18Z Warning  Failed     pod/orders-api-7f9c8b6d4-abcde  Error: ImagePullBackOff",
+    "2026-08-24T14:01:20Z Warning  Failed     pod/orders-api-7f9c8b6d4-fghij  Failed to pull image \"registry.internal/orders-api:v3.8.1\": rpc error: code = Unknown desc = failed to resolve reference: unauthorized",
+    "2026-08-24T14:01:20Z Warning  Failed     pod/orders-api-7f9c8b6d4-fghij  Error: ImagePullBackOff"
+  ],
+  "events": [
+    {"type": "deployment", "service": "orders-api", "timestamp": "2026-08-24T13:58:00+00:00", "description": "Rollout of orders-api:v3.8.1 started via CI pipeline"},
+    {"type": "config_change", "service": "container-registry", "timestamp": "2026-08-24T13:50:00+00:00", "description": "Registry pull-secret rotated as part of scheduled credential rotation"}
+  ],
+  "alerts": [
+    {"name": "KubernetesDeploymentRolloutStuck", "severity": "warning", "fired_at": "2026-08-24T14:01:00+00:00"}
+  ],
+  "metrics": {
+    "pods_desired": 6,
+    "pods_ready": 3,
+    "pods_image_pull_backoff": 3,
+    "rollout_progress_pct": 50
+  },
+  "metadata": {
+    "cluster": "prod-ap-southeast-2",
+    "namespace": "orders",
+    "on_call_team": "PLATFORM"
+  }
+}

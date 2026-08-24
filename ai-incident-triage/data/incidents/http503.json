@@ -1,48 +1,38 @@
 {
-  "incident_id": "INC-001",
-  "incident_type": "PERFORMANCE",
-  "title": "High API 5xx Error Rate on checkout-service",
-  "description": "Aggregate 5xx rate on checkout-service exceeded 10/min. Onset correlates with an autoscaler scale-down (6->2 replicas) minutes after the v2.4.1 release; rollback and scale-up restored service.",
-  "source": "mock",
-  "service": "checkout-service",
+  "incident_id": "INC-PERF-3077",
+  "title": "Intermittent HTTP 503 errors on web storefront",
+  "description": "Customers are intermittently seeing 'Service Unavailable' pages on the web storefront. The API gateway is returning HTTP 503 for roughly 1 in 6 requests to the product-catalog service, correlated with slow upstream response times and high JVM heap saturation.",
+  "source": "cloudwatch",
+  "service": "product-catalog",
   "environment": "PRODUCTION",
-  "priority_hint": "P1",
-  "tags": [
-    "checkout-service",
-    "prod",
-    "v2.4.1"
+  "priority_hint": "P2",
+  "tags": ["http503", "performance", "latency", "product-catalog"],
+  "timestamp": "2026-08-24T11:47:52+00:00",
+  "logs": [
+    "2026-08-24T11:45:01Z gateway: WARN upstream product-catalog response time 4820ms exceeds SLA (500ms)",
+    "2026-08-24T11:45:03Z gateway: ERROR upstream product-catalog timed out after 5000ms, returning 503",
+    "2026-08-24T11:45:09Z product-catalog: WARN GC pause 2100ms (old-gen), heap usage 92%",
+    "2026-08-24T11:45:20Z gateway: ERROR upstream product-catalog timed out after 5000ms, returning 503",
+    "2026-08-24T11:46:02Z product-catalog: WARN GC pause 2400ms (old-gen), heap usage 95%",
+    "2026-08-24T11:46:44Z gateway: ERROR upstream product-catalog timed out after 5000ms, returning 503",
+    "2026-08-24T11:47:10Z product-catalog: ERROR OutOfMemoryError: Java heap space during search query execution"
   ],
-  "timestamp": "2026-08-06T10:07:00.000Z",
-  "raw_logs": [],
-  "raw_events": [],
-  "raw_alerts": [
-    {
-      "alert_name": "HighAPI5xxErrorRate",
-      "severity": "critical",
-      "fired_at": "2026-08-06T10:11:00.000Z",
-      "labels": {
-        "service": "checkout-service",
-        "namespace": "prod"
-      }
-    }
+  "events": [
+    {"type": "traffic_spike", "service": "product-catalog", "timestamp": "2026-08-24T11:30:00+00:00", "description": "Search request volume up 2.6x following a marketing email send"},
+    {"type": "deployment", "service": "product-catalog", "timestamp": "2026-08-24T10:00:00+00:00", "description": "Deployed product-catalog v1.19.3 with an updated search-result caching layer"}
   ],
-  "raw_metrics": {},
+  "alerts": [
+    {"name": "HighHttp503Rate", "severity": "warning", "fired_at": "2026-08-24T11:46:00+00:00"},
+    {"name": "HeapUsageCritical", "severity": "critical", "fired_at": "2026-08-24T11:47:00+00:00"}
+  ],
+  "metrics": {
+    "http_503_rate_pct": 16.4,
+    "p99_latency_ms": 4820,
+    "jvm_heap_usage_pct": 95,
+    "gc_pause_ms_avg": 2200
+  },
   "metadata": {
-    "scenario_id": "INC-001",
-    "pod_prefix": "checkout-service",
-    "deploy_version": "v2.4.1",
-    "trace_id_prefix": "a11ce5ed",
-    "time_window": {
-      "onset": "2026-08-06T10:07:00.000Z",
-      "escalation": "2026-08-06T10:11:00.000Z",
-      "peak": "2026-08-06T10:16:00.000Z",
-      "resolution": "2026-08-06T10:26:00.000Z"
-    },
-    "data_sources": [
-      "logs_traces",
-      "k8s_logs",
-      "metrics",
-      "deployment_events"
-    ]
+    "region": "ap-southeast-2",
+    "on_call_team": "SRE"
   }
 }
