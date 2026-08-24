@@ -1,1 +1,40 @@
-{}
+{
+  "incident_id": "INC-K8S-2091",
+  "title": "Auth service pods CrashLoopBackOff after config deploy",
+  "description": "auth-service pods are repeatedly restarting and cycling into CrashLoopBackOff shortly after startup. Login and token-refresh requests are failing cluster-wide because there are no healthy pods left to serve traffic.",
+  "source": "kubernetes",
+  "service": "auth-service",
+  "environment": "PRODUCTION",
+  "priority_hint": "P1",
+  "tags": ["kubernetes", "auth", "crashloopbackoff", "login"],
+  "timestamp": "2026-08-24T06:31:47+00:00",
+  "logs": [
+    "2026-08-24T06:29:10Z auth-service: FATAL panic: failed to load signing key from /etc/auth/keys/jwt-signing.pem: no such file or directory",
+    "2026-08-24T06:29:10Z auth-service: goroutine 1 [running]: main.loadSigningKey(...) exited with status 1",
+    "2026-08-24T06:29:12Z Warning  BackOff  pod/auth-service-6b5f7d9c8-klmno  Back-off restarting failed container",
+    "2026-08-24T06:29:12Z Warning  Unhealthy  pod/auth-service-6b5f7d9c8-klmno  Readiness probe failed: connection refused",
+    "2026-08-24T06:30:02Z auth-service: FATAL panic: failed to load signing key from /etc/auth/keys/jwt-signing.pem: no such file or directory",
+    "2026-08-24T06:30:04Z Warning  BackOff  pod/auth-service-6b5f7d9c8-klmno  Back-off restarting failed container",
+    "2026-08-24T06:31:00Z gateway: ERROR upstream auth-service unavailable, 0 healthy endpoints"
+  ],
+  "events": [
+    {"type": "deployment", "service": "auth-service", "timestamp": "2026-08-24T06:28:00+00:00", "description": "Deployed auth-service v5.2.0 with updated ConfigMap referencing a renamed secret volume mount"},
+    {"type": "config_change", "service": "auth-service", "timestamp": "2026-08-24T06:27:30+00:00", "description": "Secret volume mount path changed from /etc/auth/secrets to /etc/auth/keys in the new Helm values"}
+  ],
+  "alerts": [
+    {"name": "PodCrashLoopBackOff", "severity": "critical", "fired_at": "2026-08-24T06:30:00+00:00"},
+    {"name": "AuthServiceZeroHealthyEndpoints", "severity": "critical", "fired_at": "2026-08-24T06:31:00+00:00"}
+  ],
+  "metrics": {
+    "pods_desired": 4,
+    "pods_ready": 0,
+    "pods_crashloopbackoff": 4,
+    "restart_count_last_10m": 27,
+    "login_error_rate_pct": 100
+  },
+  "metadata": {
+    "cluster": "prod-ap-southeast-2",
+    "namespace": "auth",
+    "on_call_team": "PLATFORM"
+  }
+}
