@@ -1,1 +1,48 @@
-{}
+{
+  "incident_id": "INC-002",
+  "incident_type": "KUBERNETES",
+  "title": "OOMKilled crash loop on cart-service",
+  "description": "cart-service pods repeatedly terminated with OOMKilled (exit 137). Memory climbed steadily for ~20 minutes beforehand; no deployment in the prior hour. Session-cache growth without eviction is suspected.",
+  "source": "mock",
+  "service": "cart-service",
+  "environment": "PRODUCTION",
+  "priority_hint": "P2",
+  "tags": [
+    "cart-service",
+    "prod",
+    "v1.9.3"
+  ],
+  "timestamp": "2026-08-06T10:05:00.000Z",
+  "raw_logs": [],
+  "raw_events": [],
+  "raw_alerts": [
+    {
+      "alert_name": "PodCrashLoopBackOffOOMKilled",
+      "severity": "high",
+      "fired_at": "2026-08-06T10:19:00.000Z",
+      "labels": {
+        "service": "cart-service",
+        "namespace": "prod"
+      }
+    }
+  ],
+  "raw_metrics": {},
+  "metadata": {
+    "scenario_id": "INC-002",
+    "pod_prefix": "cart-service",
+    "deploy_version": "v1.9.3",
+    "trace_id_prefix": "b0bcafe1",
+    "time_window": {
+      "onset": "2026-08-06T10:05:00.000Z",
+      "escalation": "2026-08-06T10:19:00.000Z",
+      "peak": "2026-08-06T10:24:00.000Z",
+      "resolution": "2026-08-06T10:29:00.000Z"
+    },
+    "data_sources": [
+      "logs_traces",
+      "k8s_logs",
+      "metrics",
+      "deployment_events"
+    ]
+  }
+}

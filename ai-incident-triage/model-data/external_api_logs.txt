@@ -1,0 +1,13 @@
+2026-08-06T10:31:10.000Z OUTBOUND payment-service -> https://api.payment-gateway-external.example/v1/charge attempt=1 result=TIMEOUT http_status=- elapsed_ms=8000
+2026-08-06T10:32:05.000Z OUTBOUND payment-service -> https://api.payment-gateway-external.example/v1/charge attempt=1 result=SUCCESS http_status=200 elapsed_ms=412
+2026-08-06T10:33:02.000Z OUTBOUND payment-service -> https://api.payment-gateway-external.example/v1/charge attempt=1 result=HTTP_5XX http_status=504 elapsed_ms=6400
+2026-08-06T10:34:40.000Z OUTBOUND payment-service -> https://api.payment-gateway-external.example/v1/charge attempt=2 result=TIMEOUT http_status=- elapsed_ms=8000
+2026-08-06T10:35:30.000Z OUTBOUND payment-service -> https://api.payment-gateway-external.example/v1/charge attempt=3 result=TLS_HANDSHAKE_TIMEOUT http_status=- elapsed_ms=8000
+2026-08-06T10:35:31.000Z PROVIDER status page feed: payment-gateway-external reporting 'elevated error rates, engineers engaged'
+2026-08-06T10:37:15.000Z OUTBOUND payment-service -> https://api.payment-gateway-external.example/v1/charge attempt=1 result=TIMEOUT http_status=- elapsed_ms=8000
+2026-08-06T10:39:05.000Z OUTBOUND payment-service -> https://api.payment-gateway-external.example/v1/charge attempt=1 result=HTTP_5XX http_status=503 elapsed_ms=7100
+2026-08-06T10:41:00.000Z OUTBOUND payment-service -> https://api.payment-gateway-external.example/v1/charge attempt=2 result=TIMEOUT http_status=- elapsed_ms=8000
+2026-08-06T10:43:20.000Z OUTBOUND payment-service -> https://api.payment-gateway-external.example/v1/charge attempt=1 result=SUCCESS http_status=200 elapsed_ms=380
+2026-08-06T10:44:55.000Z OUTBOUND payment-service -> https://api.payment-gateway-external.example/v1/charge attempt=1 result=TIMEOUT http_status=- elapsed_ms=8000
+2026-08-06T10:47:30.000Z OUTBOUND payment-service -> https://api.payment-gateway-external.example/v1/charge attempt=1 result=SUCCESS http_status=200 elapsed_ms=402
+2026-08-06T10:48:45.000Z OUTBOUND payment-service -> https://api.payment-gateway-external.example/v1/charge attempt=1 result=SUCCESS http_status=200 elapsed_ms=365

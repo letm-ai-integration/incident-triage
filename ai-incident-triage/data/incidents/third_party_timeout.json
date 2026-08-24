@@ -1,0 +1,47 @@
+{
+  "incident_id": "INC-004",
+  "incident_type": "THIRD_PARTY",
+  "title": "Third-party payment gateway timeouts on payment-service",
+  "description": "payment-gateway-external returned elevated timeouts and 5xx; payment-service retries and circuit-breaker state transitions tracked the outage. Provider recovered; deferred charges settled.",
+  "source": "mock",
+  "service": "payment-service",
+  "environment": "PRODUCTION",
+  "priority_hint": "P2",
+  "tags": [
+    "payment-service",
+    "prod",
+    "v1.12.0"
+  ],
+  "timestamp": "2026-08-06T10:31:00.000Z",
+  "raw_logs": [],
+  "raw_events": [],
+  "raw_alerts": [
+    {
+      "alert_name": "ThirdPartyDependencyTimeout",
+      "severity": "high",
+      "fired_at": "2026-08-06T10:35:00.000Z",
+      "labels": {
+        "service": "payment-service",
+        "namespace": "prod"
+      }
+    }
+  ],
+  "raw_metrics": {},
+  "metadata": {
+    "scenario_id": "INC-004",
+    "pod_prefix": "payment-service",
+    "deploy_version": "v1.12.0",
+    "trace_id_prefix": "deadbeef",
+    "time_window": {
+      "onset": "2026-08-06T10:31:00.000Z",
+      "escalation": "2026-08-06T10:35:00.000Z",
+      "peak": "2026-08-06T10:41:00.000Z",
+      "resolution": "2026-08-06T10:49:00.000Z"
+    },
+    "data_sources": [
+      "logs_traces",
+      "external_api_logs",
+      "metrics"
+    ]
+  }
+}

@@ -1,1 +1,47 @@
-{}
+{
+  "incident_id": "INC-003",
+  "incident_type": "DATABASE",
+  "title": "DB connection pool exhaustion on order-service",
+  "description": "HikariPool-1 on order-service reached 100% utilization with rising waiter count and 30s acquisition timeouts. No slow queries on the primary; traffic was flat, indicating leaked/unreturned connections.",
+  "source": "mock",
+  "service": "order-service",
+  "environment": "PRODUCTION",
+  "priority_hint": "P1",
+  "tags": [
+    "order-service",
+    "prod",
+    "v4.0.2"
+  ],
+  "timestamp": "2026-08-06T10:14:00.000Z",
+  "raw_logs": [],
+  "raw_events": [],
+  "raw_alerts": [
+    {
+      "alert_name": "DbConnectionPoolExhausted",
+      "severity": "critical",
+      "fired_at": "2026-08-06T10:21:00.000Z",
+      "labels": {
+        "service": "order-service",
+        "namespace": "prod"
+      }
+    }
+  ],
+  "raw_metrics": {},
+  "metadata": {
+    "scenario_id": "INC-003",
+    "pod_prefix": "order-service",
+    "deploy_version": "v4.0.2",
+    "trace_id_prefix": "c0ffee01",
+    "time_window": {
+      "onset": "2026-08-06T10:14:00.000Z",
+      "escalation": "2026-08-06T10:21:00.000Z",
+      "peak": "2026-08-06T10:28:00.000Z",
+      "resolution": "2026-08-06T10:36:00.000Z"
+    },
+    "data_sources": [
+      "logs_traces",
+      "db_logs",
+      "metrics"
+    ]
+  }
+}

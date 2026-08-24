@@ -1,0 +1,548 @@
+[
+  {
+    "timestamp": "2026-08-06T10:04:00.000Z",
+    "service": "checkout-service",
+    "pod_name": "checkout-service-7f9c8d-x2k1p",
+    "metric_name": "replica_count",
+    "value": 6
+  },
+  {
+    "timestamp": "2026-08-06T10:05:00.000Z",
+    "service": "checkout-service",
+    "pod_name": "checkout-service-7f9c8d-x2k1p",
+    "metric_name": "replica_count",
+    "value": 2
+  },
+  {
+    "timestamp": "2026-08-06T10:05:00.000Z",
+    "service": "cart-service",
+    "pod_name": "cart-service-6d7f4b-p9w2n",
+    "metric_name": "memory_pct",
+    "value": 61.5
+  },
+  {
+    "timestamp": "2026-08-06T10:07:00.000Z",
+    "service": "checkout-service",
+    "pod_name": "checkout-service-7f9c8d-x2k1p",
+    "metric_name": "error_rate_pct",
+    "value": 1.2
+  },
+  {
+    "timestamp": "2026-08-06T10:07:00.000Z",
+    "service": "checkout-service",
+    "pod_name": "checkout-service-7f9c8d-x2k1p",
+    "metric_name": "p95_latency_ms",
+    "value": 480
+  },
+  {
+    "timestamp": "2026-08-06T10:07:00.000Z",
+    "service": "checkout-service",
+    "pod_name": "checkout-service-7f9c8d-x2k1p",
+    "metric_name": "cpu_pct",
+    "value": 52.0
+  },
+  {
+    "timestamp": "2026-08-06T10:08:00.000Z",
+    "service": "cart-service",
+    "pod_name": "cart-service-6d7f4b-t3r7c",
+    "metric_name": "memory_pct",
+    "value": 66.0
+  },
+  {
+    "timestamp": "2026-08-06T10:09:00.000Z",
+    "service": "checkout-service",
+    "pod_name": "checkout-service-7f9c8d-x2k1p",
+    "metric_name": "error_rate_pct",
+    "value": 4.5
+  },
+  {
+    "timestamp": "2026-08-06T10:11:00.000Z",
+    "service": "checkout-service",
+    "pod_name": "checkout-service-7f9c8d-x2k1p",
+    "metric_name": "error_rate_pct",
+    "value": 11.0
+  },
+  {
+    "timestamp": "2026-08-06T10:11:00.000Z",
+    "service": "checkout-service",
+    "pod_name": "checkout-service-7f9c8d-x2k1p",
+    "metric_name": "p95_latency_ms",
+    "value": 1900
+  },
+  {
+    "timestamp": "2026-08-06T10:11:00.000Z",
+    "service": "checkout-service",
+    "pod_name": "checkout-service-7f9c8d-m4v8q",
+    "metric_name": "cpu_pct",
+    "value": 78.0
+  },
+  {
+    "timestamp": "2026-08-06T10:11:00.000Z",
+    "service": "cart-service",
+    "pod_name": "cart-service-6d7f4b-p9w2n",
+    "metric_name": "memory_pct",
+    "value": 70.5
+  },
+  {
+    "timestamp": "2026-08-06T10:13:00.000Z",
+    "service": "checkout-service",
+    "pod_name": "checkout-service-7f9c8d-x2k1p",
+    "metric_name": "error_rate_pct",
+    "value": 21.0
+  },
+  {
+    "timestamp": "2026-08-06T10:14:00.000Z",
+    "service": "checkout-service",
+    "pod_name": "checkout-service-7f9c8d-x2k1p",
+    "metric_name": "cpu_pct",
+    "value": 91.0
+  },
+  {
+    "timestamp": "2026-08-06T10:14:00.000Z",
+    "service": "cart-service",
+    "pod_name": "cart-service-6d7f4b-t3r7c",
+    "metric_name": "memory_pct",
+    "value": 75.5
+  },
+  {
+    "timestamp": "2026-08-06T10:14:00.000Z",
+    "service": "order-service",
+    "pod_name": "order-service-58bd7c-q7l2n",
+    "metric_name": "requests_per_sec",
+    "value": 178.0
+  },
+  {
+    "timestamp": "2026-08-06T10:14:00.000Z",
+    "service": "order-service",
+    "pod_name": "order-service-58bd7c-q7l2n",
+    "metric_name": "hikari_pool_utilization_pct",
+    "value": 92.0
+  },
+  {
+    "timestamp": "2026-08-06T10:14:00.000Z",
+    "service": "order-service",
+    "pod_name": "order-service-58bd7c-q7l2n",
+    "metric_name": "threads_blocked_on_db",
+    "value": 3.0
+  },
+  {
+    "timestamp": "2026-08-06T10:16:00.000Z",
+    "service": "checkout-service",
+    "pod_name": "checkout-service-7f9c8d-x2k1p",
+    "metric_name": "error_rate_pct",
+    "value": 38.0
+  },
+  {
+    "timestamp": "2026-08-06T10:16:00.000Z",
+    "service": "checkout-service",
+    "pod_name": "checkout-service-7f9c8d-x2k1p",
+    "metric_name": "p95_latency_ms",
+    "value": 4800
+  },
+  {
+    "timestamp": "2026-08-06T10:16:00.000Z",
+    "service": "checkout-service",
+    "pod_name": "checkout-service-7f9c8d-m4v8q",
+    "metric_name": "cpu_pct",
+    "value": 97.0
+  },
+  {
+    "timestamp": "2026-08-06T10:17:00.000Z",
+    "service": "cart-service",
+    "pod_name": "cart-service-6d7f4b-p9w2n",
+    "metric_name": "memory_pct",
+    "value": 80.0
+  },
+  {
+    "timestamp": "2026-08-06T10:17:00.000Z",
+    "service": "cart-service",
+    "pod_name": "cart-service-6d7f4b-p9w2n",
+    "metric_name": "gc_pause_ms",
+    "value": 220.0
+  },
+  {
+    "timestamp": "2026-08-06T10:18:00.000Z",
+    "service": "checkout-service",
+    "pod_name": "checkout-service-7f9c8d-x2k1p",
+    "metric_name": "error_rate_pct",
+    "value": 12.0
+  },
+  {
+    "timestamp": "2026-08-06T10:18:00.000Z",
+    "service": "order-service",
+    "pod_name": "order-service-58bd7c-q7l2n",
+    "metric_name": "requests_per_sec",
+    "value": 181.0
+  },
+  {
+    "timestamp": "2026-08-06T10:20:00.000Z",
+    "service": "checkout-service",
+    "pod_name": "checkout-service-7f9c8d-x2k1p",
+    "metric_name": "error_rate_pct",
+    "value": 27.0
+  },
+  {
+    "timestamp": "2026-08-06T10:20:00.000Z",
+    "service": "checkout-service",
+    "pod_name": "checkout-service-7f9c8d-x2k1p",
+    "metric_name": "p95_latency_ms",
+    "value": 2600
+  },
+  {
+    "timestamp": "2026-08-06T10:20:00.000Z",
+    "service": "checkout-service",
+    "pod_name": "checkout-service-7f9c8d-x2k1p",
+    "metric_name": "cpu_pct",
+    "value": 88.0
+  },
+  {
+    "timestamp": "2026-08-06T10:20:00.000Z",
+    "service": "cart-service",
+    "pod_name": "cart-service-6d7f4b-t3r7c",
+    "metric_name": "memory_pct",
+    "value": 85.0
+  },
+  {
+    "timestamp": "2026-08-06T10:20:00.000Z",
+    "service": "cart-service",
+    "pod_name": "cart-service-6d7f4b-p9w2n",
+    "metric_name": "gc_pause_ms",
+    "value": 640.0
+  },
+  {
+    "timestamp": "2026-08-06T10:20:00.000Z",
+    "service": "order-service",
+    "pod_name": "order-service-58bd7c-q7l2n",
+    "metric_name": "hikari_pool_utilization_pct",
+    "value": 100.0
+  },
+  {
+    "timestamp": "2026-08-06T10:20:00.000Z",
+    "service": "order-service",
+    "pod_name": "order-service-58bd7c-q7l2n",
+    "metric_name": "threads_blocked_on_db",
+    "value": 27.0
+  },
+  {
+    "timestamp": "2026-08-06T10:20:00.000Z",
+    "service": "order-service",
+    "pod_name": "order-service-58bd7c-q7l2n",
+    "metric_name": "error_rate_pct",
+    "value": 14.5
+  },
+  {
+    "timestamp": "2026-08-06T10:22:00.000Z",
+    "service": "cart-service",
+    "pod_name": "cart-service-6d7f4b-p9w2n",
+    "metric_name": "memory_pct",
+    "value": 89.5
+  },
+  {
+    "timestamp": "2026-08-06T10:22:00.000Z",
+    "service": "cart-service",
+    "pod_name": "cart-service-6d7f4b-p9w2n",
+    "metric_name": "gc_pause_ms",
+    "value": 1180.0
+  },
+  {
+    "timestamp": "2026-08-06T10:22:00.000Z",
+    "service": "order-service",
+    "pod_name": "order-service-58bd7c-q7l2n",
+    "metric_name": "requests_per_sec",
+    "value": 176.0
+  },
+  {
+    "timestamp": "2026-08-06T10:23:00.000Z",
+    "service": "checkout-service",
+    "pod_name": "checkout-service-7f9c8d-x2k1p",
+    "metric_name": "error_rate_pct",
+    "value": 9.0
+  },
+  {
+    "timestamp": "2026-08-06T10:23:00.000Z",
+    "service": "checkout-service",
+    "pod_name": "checkout-service-7f9c8d-x2k1p",
+    "metric_name": "replica_count",
+    "value": 4
+  },
+  {
+    "timestamp": "2026-08-06T10:23:00.000Z",
+    "service": "cart-service",
+    "pod_name": "cart-service-6d7f4b-t3r7c",
+    "metric_name": "memory_pct",
+    "value": 92.0
+  },
+  {
+    "timestamp": "2026-08-06T10:23:00.000Z",
+    "service": "cart-service",
+    "pod_name": "cart-service-6d7f4b-p9w2n",
+    "metric_name": "gc_pause_ms",
+    "value": 1850.0
+  },
+  {
+    "timestamp": "2026-08-06T10:24:00.000Z",
+    "service": "cart-service",
+    "pod_name": "cart-service-6d7f4b-p9w2n",
+    "metric_name": "memory_pct",
+    "value": 99.8
+  },
+  {
+    "timestamp": "2026-08-06T10:26:00.000Z",
+    "service": "checkout-service",
+    "pod_name": "checkout-service-7f9c8d-x2k1p",
+    "metric_name": "error_rate_pct",
+    "value": 0.6
+  },
+  {
+    "timestamp": "2026-08-06T10:26:00.000Z",
+    "service": "checkout-service",
+    "pod_name": "checkout-service-7f9c8d-x2k1p",
+    "metric_name": "p95_latency_ms",
+    "value": 340
+  },
+  {
+    "timestamp": "2026-08-06T10:26:00.000Z",
+    "service": "checkout-service",
+    "pod_name": "checkout-service-7f9c8d-m4v8q",
+    "metric_name": "cpu_pct",
+    "value": 41.0
+  },
+  {
+    "timestamp": "2026-08-06T10:26:00.000Z",
+    "service": "cart-service",
+    "pod_name": "cart-service-6d7f4b-t3r7c",
+    "metric_name": "memory_pct",
+    "value": 94.0
+  },
+  {
+    "timestamp": "2026-08-06T10:26:00.000Z",
+    "service": "order-service",
+    "pod_name": "order-service-58bd7c-q7l2n",
+    "metric_name": "requests_per_sec",
+    "value": 183.0
+  },
+  {
+    "timestamp": "2026-08-06T10:26:00.000Z",
+    "service": "order-service",
+    "pod_name": "order-service-58bd7c-q7l2n",
+    "metric_name": "hikari_pool_utilization_pct",
+    "value": 100.0
+  },
+  {
+    "timestamp": "2026-08-06T10:26:00.000Z",
+    "service": "order-service",
+    "pod_name": "order-service-58bd7c-q7l2n",
+    "metric_name": "threads_blocked_on_db",
+    "value": 41.0
+  },
+  {
+    "timestamp": "2026-08-06T10:28:00.000Z",
+    "service": "checkout-service",
+    "pod_name": "checkout-service-7f9c8d-x2k1p",
+    "metric_name": "error_rate_pct",
+    "value": 0.4
+  },
+  {
+    "timestamp": "2026-08-06T10:28:00.000Z",
+    "service": "order-service",
+    "pod_name": "order-service-58bd7c-q7l2n",
+    "metric_name": "error_rate_pct",
+    "value": 23.0
+  },
+  {
+    "timestamp": "2026-08-06T10:29:00.000Z",
+    "service": "cart-service",
+    "pod_name": "cart-service-6d7f4b-p9w2n",
+    "metric_name": "memory_pct",
+    "value": 58.0
+  },
+  {
+    "timestamp": "2026-08-06T10:30:00.000Z",
+    "service": "order-service",
+    "pod_name": "order-service-58bd7c-q7l2n",
+    "metric_name": "requests_per_sec",
+    "value": 179.0
+  },
+  {
+    "timestamp": "2026-08-06T10:31:00.000Z",
+    "service": "payment-service",
+    "pod_name": "payment-service-64c8ff-n5j9r",
+    "metric_name": "egress_p95_latency_ms",
+    "value": 850.0
+  },
+  {
+    "timestamp": "2026-08-06T10:31:00.000Z",
+    "service": "payment-service",
+    "pod_name": "payment-service-64c8ff-n5j9r",
+    "metric_name": "payment_success_rate_pct",
+    "value": 98.2
+  },
+  {
+    "timestamp": "2026-08-06T10:32:00.000Z",
+    "service": "order-service",
+    "pod_name": "order-service-58bd7c-q7l2n",
+    "metric_name": "hikari_pool_utilization_pct",
+    "value": 76.0
+  },
+  {
+    "timestamp": "2026-08-06T10:32:00.000Z",
+    "service": "order-service",
+    "pod_name": "order-service-58bd7c-q7l2n",
+    "metric_name": "threads_blocked_on_db",
+    "value": 9.0
+  },
+  {
+    "timestamp": "2026-08-06T10:34:00.000Z",
+    "service": "payment-service",
+    "pod_name": "payment-service-64c8ff-n5j9r",
+    "metric_name": "egress_p95_latency_ms",
+    "value": 4200.0
+  },
+  {
+    "timestamp": "2026-08-06T10:36:00.000Z",
+    "service": "order-service",
+    "pod_name": "order-service-58bd7c-q7l2n",
+    "metric_name": "requests_per_sec",
+    "value": 180.0
+  },
+  {
+    "timestamp": "2026-08-06T10:36:00.000Z",
+    "service": "order-service",
+    "pod_name": "order-service-58bd7c-q7l2n",
+    "metric_name": "hikari_pool_utilization_pct",
+    "value": 48.0
+  },
+  {
+    "timestamp": "2026-08-06T10:36:00.000Z",
+    "service": "order-service",
+    "pod_name": "order-service-58bd7c-q7l2n",
+    "metric_name": "threads_blocked_on_db",
+    "value": 0.0
+  },
+  {
+    "timestamp": "2026-08-06T10:37:00.000Z",
+    "service": "payment-service",
+    "pod_name": "payment-service-64c8ff-n5j9r",
+    "metric_name": "egress_p95_latency_ms",
+    "value": 8100.0
+  },
+  {
+    "timestamp": "2026-08-06T10:37:00.000Z",
+    "service": "payment-service",
+    "pod_name": "payment-service-64c8ff-n5j9r",
+    "metric_name": "payment_success_rate_pct",
+    "value": 71.0
+  },
+  {
+    "timestamp": "2026-08-06T10:41:00.000Z",
+    "service": "payment-service",
+    "pod_name": "payment-service-64c8ff-n5j9r",
+    "metric_name": "egress_p95_latency_ms",
+    "value": 9800.0
+  },
+  {
+    "timestamp": "2026-08-06T10:41:00.000Z",
+    "service": "payment-service",
+    "pod_name": "payment-service-64c8ff-n5j9r",
+    "metric_name": "payment_success_rate_pct",
+    "value": 64.5
+  },
+  {
+    "timestamp": "2026-08-06T10:44:00.000Z",
+    "service": "payment-service",
+    "pod_name": "payment-service-64c8ff-n5j9r",
+    "metric_name": "egress_p95_latency_ms",
+    "value": 5200.0
+  },
+  {
+    "timestamp": "2026-08-06T10:44:00.000Z",
+    "service": "inventory-service",
+    "pod_name": "inventory-service-5d4e8a-b2x9q",
+    "metric_name": "error_rate_pct",
+    "value": 0.3
+  },
+  {
+    "timestamp": "2026-08-06T10:44:00.000Z",
+    "service": "inventory-service",
+    "pod_name": "inventory-service-5d4e8a-b2x9q",
+    "metric_name": "p95_latency_ms",
+    "value": 210.0
+  },
+  {
+    "timestamp": "2026-08-06T10:46:00.000Z",
+    "service": "inventory-service",
+    "pod_name": "inventory-service-5d4e8a-b2x9q",
+    "metric_name": "error_rate_pct",
+    "value": 0.4
+  },
+  {
+    "timestamp": "2026-08-06T10:47:00.000Z",
+    "service": "inventory-service",
+    "pod_name": "inventory-service-5d4e8a-b2x9q",
+    "metric_name": "error_rate_pct",
+    "value": 9.0
+  },
+  {
+    "timestamp": "2026-08-06T10:49:00.000Z",
+    "service": "payment-service",
+    "pod_name": "payment-service-64c8ff-n5j9r",
+    "metric_name": "egress_p95_latency_ms",
+    "value": 620.0
+  },
+  {
+    "timestamp": "2026-08-06T10:49:00.000Z",
+    "service": "payment-service",
+    "pod_name": "payment-service-64c8ff-n5j9r",
+    "metric_name": "payment_success_rate_pct",
+    "value": 98.9
+  },
+  {
+    "timestamp": "2026-08-06T10:49:00.000Z",
+    "service": "inventory-service",
+    "pod_name": "inventory-service-5d4e8a-b2x9q",
+    "metric_name": "error_rate_pct",
+    "value": 17.5
+  },
+  {
+    "timestamp": "2026-08-06T10:52:00.000Z",
+    "service": "inventory-service",
+    "pod_name": "inventory-service-5d4e8a-b2x9q",
+    "metric_name": "error_rate_pct",
+    "value": 22.0
+  },
+  {
+    "timestamp": "2026-08-06T10:52:00.000Z",
+    "service": "inventory-service",
+    "pod_name": "inventory-service-5d4e8a-b2x9q",
+    "metric_name": "p95_latency_ms",
+    "value": 640.0
+  },
+  {
+    "timestamp": "2026-08-06T10:54:00.000Z",
+    "service": "inventory-service",
+    "pod_name": "inventory-service-5d4e8a-b2x9q",
+    "metric_name": "error_rate_pct",
+    "value": 6.0
+  },
+  {
+    "timestamp": "2026-08-06T10:57:00.000Z",
+    "service": "inventory-service",
+    "pod_name": "inventory-service-5d4e8a-b2x9q",
+    "metric_name": "error_rate_pct",
+    "value": 0.4
+  },
+  {
+    "timestamp": "2026-08-06T11:00:00.000Z",
+    "service": "inventory-service",
+    "pod_name": "inventory-service-5d4e8a-b2x9q",
+    "metric_name": "error_rate_pct",
+    "value": 0.3
+  },
+  {
+    "timestamp": "2026-08-06T11:00:00.000Z",
+    "service": "inventory-service",
+    "pod_name": "inventory-service-5d4e8a-b2x9q",
+    "metric_name": "p95_latency_ms",
+    "value": 230.0
+  }
+]

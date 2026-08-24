@@ -1,0 +1,48 @@
+{
+  "incident_id": "INC-005",
+  "incident_type": "DEPLOYMENT",
+  "title": "Deployment regression on inventory-service (v3.1.0)",
+  "description": "A new ClassCastException error class appeared on inventory-service immediately after the v3.1.0 rollout, with readiness probe failures. Rolled back to v3.0.9; error rate recovered.",
+  "source": "mock",
+  "service": "inventory-service",
+  "environment": "PRODUCTION",
+  "priority_hint": "P1",
+  "tags": [
+    "inventory-service",
+    "prod",
+    "v3.1.0"
+  ],
+  "timestamp": "2026-08-06T10:47:00.000Z",
+  "raw_logs": [],
+  "raw_events": [],
+  "raw_alerts": [
+    {
+      "alert_name": "NewErrorTypeAfterDeployment",
+      "severity": "critical",
+      "fired_at": "2026-08-06T10:50:00.000Z",
+      "labels": {
+        "service": "inventory-service",
+        "namespace": "prod"
+      }
+    }
+  ],
+  "raw_metrics": {},
+  "metadata": {
+    "scenario_id": "INC-005",
+    "pod_prefix": "inventory-service",
+    "deploy_version": "v3.1.0",
+    "trace_id_prefix": "f00dface",
+    "time_window": {
+      "onset": "2026-08-06T10:47:00.000Z",
+      "escalation": "2026-08-06T10:50:00.000Z",
+      "peak": "2026-08-06T10:52:00.000Z",
+      "resolution": "2026-08-06T11:00:00.000Z"
+    },
+    "data_sources": [
+      "logs_traces",
+      "k8s_logs",
+      "metrics",
+      "deployment_events"
+    ]
+  }
+}

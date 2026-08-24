@@ -1,5 +1,6 @@
 from enum import Enum
 
+
 class IncidentType(str, Enum):
     INFRASTRUCTURE = "INFRASTRUCTURE"
     APPLICATION = "APPLICATION"
@@ -8,4 +9,6 @@ class IncidentType(str, Enum):
     SECURITY = "SECURITY"
     KUBERNETES = "KUBERNETES"
     PERFORMANCE = "PERFORMANCE"
+    THIRD_PARTY = "THIRD_PARTY"
+    DEPLOYMENT = "DEPLOYMENT"
     UNKNOWN = "UNKNOWN"

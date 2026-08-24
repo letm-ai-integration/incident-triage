@@ -1,0 +1,20 @@
+2026-08-06T10:14:00.000Z LOG  [order-db-pool] active=46 idle=4 waiting=2 utilization=92% threads_blocked=2
+2026-08-06T10:14:01.000Z LOG  [order-db-pool] slow_query_log: 0 statements exceeded 500ms threshold in last 60s
+2026-08-06T10:17:03.000Z LOG  [order-db-pool] active=49 idle=1 waiting=6 utilization=98% threads_blocked=6
+2026-08-06T10:17:04.000Z LOG  [order-db-pool] slow_query_log: 0 statements exceeded 500ms threshold in last 60s
+2026-08-06T10:20:06.000Z LOG  [order-db-pool] active=50 idle=0 waiting=14 utilization=100% threads_blocked=14
+2026-08-06T10:20:07.000Z LOG  [order-db-pool] slow_query_log: 0 statements exceeded 500ms threshold in last 60s
+2026-08-06T10:21:12.000Z LOG  connection authorized: user=order_svc db=orders host=10.0.4.21 application=order-service
+2026-08-06T10:23:09.000Z LOG  [order-db-pool] active=50 idle=0 waiting=22 utilization=100% threads_blocked=22
+2026-08-06T10:23:10.000Z LOG  [order-db-pool] slow_query_log: 0 statements exceeded 500ms threshold in last 60s
+2026-08-06T10:26:12.000Z LOG  [order-db-pool] active=50 idle=0 waiting=31 utilization=100% threads_blocked=31
+2026-08-06T10:26:13.000Z LOG  [order-db-pool] slow_query_log: 0 statements exceeded 500ms threshold in last 60s
+2026-08-06T10:28:15.000Z LOG  [order-db-pool] active=50 idle=0 waiting=34 utilization=100% threads_blocked=34
+2026-08-06T10:28:16.000Z LOG  [order-db-pool] slow_query_log: 0 statements exceeded 500ms threshold in last 60s
+2026-08-06T10:28:40.000Z WARNING [order-db-pool] connection acquisition wait time p95=29800ms approaching timeout 30000ms
+2026-08-06T10:32:18.000Z LOG  [order-db-pool] active=38 idle=12 waiting=8 utilization=76% threads_blocked=8
+2026-08-06T10:32:19.000Z LOG  [order-db-pool] slow_query_log: 0 statements exceeded 500ms threshold in last 60s
+2026-08-06T10:33:05.000Z LOG  [analytics-replica] statement took 4120ms: SELECT * FROM events_daily WHERE region='EU' AND dt > now() - interval '30 days'
+2026-08-06T10:36:10.000Z LOG  [order-db-pool] active=24 idle=26 waiting=0 utilization=48% threads_blocked=0
+2026-08-06T10:36:21.000Z LOG  [order-db-pool] active=24 idle=26 waiting=0 utilization=48% threads_blocked=0
+2026-08-06T10:36:22.000Z LOG  [order-db-pool] slow_query_log: 0 statements exceeded 500ms threshold in last 60s
