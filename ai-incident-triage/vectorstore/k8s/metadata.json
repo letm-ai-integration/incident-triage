@@ -1,0 +1,18 @@
+[
+  {
+    "id": "knowledge_base/kubernetes/pod-crash.md::0::CrashLoopBackOff",
+    "text": "## CrashLoopBackOff\n\nA `CrashLoopBackOff` indicates that a pod is starting, crashing, and then starting again in a loop.\n\n**Common Causes:**\n- Application misconfiguration (missing environment variables, invalid config files).\n- The application is trying to allocate more memory than the limit, causing OOMKilled before crashing.\n- Database connection failures on startup.\n- Uncaught exceptions during initialization.\n\n**Resolution Steps:**\n1. Check the pod logs for the previous crashed container: `kubectl logs <pod-name> --previous`\n2. Check the events for the pod: `kubectl describe pod <pod-name>`\n3. Verify if it's an OOMKilled by checking the container state in the pod description.",
+    "metadata": {
+      "source_file": "knowledge_base/kubernetes/pod-crash.md",
+      "title": "CrashLoopBackOff"
+    }
+  },
+  {
+    "id": "knowledge_base/kubernetes/pod-crash.md::1::ImagePullBackOff",
+    "text": "## ImagePullBackOff\n\nAn `ImagePullBackOff` indicates that the container runtime was unable to pull the container image.\n\n**Common Causes:**\n- The image tag does not exist in the registry.\n- Network issues preventing the node from reaching the container registry.\n- Authentication issues (missing or invalid imagePullSecrets).\n\n**Resolution Steps:**\n1. Check the exact error message in the events: `kubectl describe pod <pod-name>`\n2. Verify the image name and tag are correct.\n3. Verify the registry credentials if it's a private registry.",
+    "metadata": {
+      "source_file": "knowledge_base/kubernetes/pod-crash.md",
+      "title": "ImagePullBackOff"
+    }
+  }
+]
