@@ -1,0 +1,65 @@
+[
+  {
+    "timestamp": "2026-08-06T08:40:00.000Z",
+    "service": "cart-service",
+    "deploy_version": "v1.9.3",
+    "event_type": "completed",
+    "initiated_by": "ci-bot"
+  },
+  {
+    "timestamp": "2026-08-06T10:02:00.000Z",
+    "service": "checkout-service",
+    "deploy_version": "v2.4.1",
+    "event_type": "started",
+    "initiated_by": "ci-bot"
+  },
+  {
+    "timestamp": "2026-08-06T10:03:00.000Z",
+    "service": "checkout-service",
+    "deploy_version": "v2.4.1",
+    "event_type": "completed",
+    "initiated_by": "ci-bot"
+  },
+  {
+    "timestamp": "2026-08-06T10:23:00.000Z",
+    "service": "checkout-service",
+    "deploy_version": "v2.4.0",
+    "event_type": "started",
+    "initiated_by": "j.reyes"
+  },
+  {
+    "timestamp": "2026-08-06T10:25:00.000Z",
+    "service": "checkout-service",
+    "deploy_version": "v2.4.0",
+    "event_type": "completed",
+    "initiated_by": "j.reyes"
+  },
+  {
+    "timestamp": "2026-08-06T10:40:00.000Z",
+    "service": "frontend-web",
+    "deploy_version": "v6.7.2",
+    "event_type": "completed",
+    "initiated_by": "ci-bot"
+  },
+  {
+    "timestamp": "2026-08-06T10:44:00.000Z",
+    "service": "inventory-service",
+    "deploy_version": "v3.1.0",
+    "event_type": "started",
+    "initiated_by": "ci-bot"
+  },
+  {
+    "timestamp": "2026-08-06T10:46:00.000Z",
+    "service": "inventory-service",
+    "deploy_version": "v3.1.0",
+    "event_type": "completed",
+    "initiated_by": "ci-bot"
+  },
+  {
+    "timestamp": "2026-08-06T10:53:00.000Z",
+    "service": "inventory-service",
+    "deploy_version": "v3.0.9",
+    "event_type": "rolled_back",
+    "initiated_by": "m.okafor"
+  }
+]

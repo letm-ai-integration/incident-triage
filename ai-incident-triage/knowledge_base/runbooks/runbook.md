@@ -141,3 +141,53 @@ acquisition timeouts
    leak and file a follow-up bug.
 - If DB server-level limit: tune max_connections and review per-service
   allowances.
+
+---
+## Third-Party API Timeout
+
+**Alert:** External dependency error rate > 20% or egress p95 latency > 5s
+sustained for 5 minutes
+**Severity:** High
+**Routing:** prodCritical
+
+**Impact:**
+- Customer-facing transactions that depend on the third party fail or stall
+- Retry storms amplify latency onto adjacent services
+
+**RCA Path:**
+1. Check outbound-call logs for the failing provider — distinguish timeouts
+   vs. HTTP 5xx from the provider.
+2. Confirm the provider status page / feed reports degradation.
+3. Review circuit-breaker state transitions (OPEN/HALF_OPEN/CLOSED) for the
+   dependency.
+4. Verify no correlated local deployment — absence keeps blame external.
+
+**Solution:**
+- Keep the circuit breaker OPEN and serve fallback/queued processing until
+  the provider recovers; escalate to the vendor if prolonged.
+- After recovery, drain any deferred-work queues and reconcile in-flight
+  transactions.
+
+---
+
+## Deployment Regression
+
+**Alert:** New error class appearing within 15 minutes of a deployment, or
+error rate jumping > 5x baseline post-rollout
+**Severity:** Critical
+**Routing:** prodCritical
+
+**Impact:**
+- Immediate user-facing errors on affected endpoints
+- Possible readiness-probe failures reducing serving capacity
+
+**RCA Path:**
+1. Compare deployment events with first occurrence of the new error type.
+2. Confirm the error class was absent before the rollout window.
+3. Check metrics for the post-deploy error-rate step change.
+4. Roll forward only if the fix is trivial; otherwise roll back.
+
+**Solution:**
+- Roll back to the previous known-good version immediately.
+- File a follow-up bug with the stack traces captured during the window;
+  re-release only after reproducing and fixing the failure.
