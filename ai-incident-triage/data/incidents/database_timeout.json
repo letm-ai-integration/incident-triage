@@ -8,15 +8,6 @@
   "priority_hint": "P1",
   "tags": ["database", "checkout", "connection-pool", "timeout"],
   "timestamp": "2026-08-24T09:14:32+00:00",
-  "logs": [
-    "2026-08-24T09:12:01Z ERROR checkout-service: Database connection pool exhausted, unable to acquire connection after 30000ms",
-    "2026-08-24T09:12:04Z WARN  checkout-service: Connection wait queue depth = 214, exceeds threshold of 50",
-    "2026-08-24T09:12:07Z ERROR checkout-service: Database connection pool exhausted, unable to acquire connection after 30000ms",
-    "2026-08-24T09:12:15Z ERROR checkout-db: FATAL: remaining connection slots are reserved for non-replication superuser connections",
-    "2026-08-24T09:13:02Z ERROR checkout-service: Timeout waiting for connection from pool [checkout-primary]",
-    "2026-08-24T09:13:45Z INFO  checkout-service: Retrying order submission, attempt 2/3",
-    "2026-08-24T09:14:10Z ERROR checkout-service: Order submission failed after 3 retries: connection pool exhausted"
-  ],
   "events": [
     {"type": "deployment", "service": "checkout-service", "timestamp": "2026-08-24T08:55:00+00:00", "description": "Rolled out checkout-service v2.14.0 (raised default query timeout, no pool size change)"},
     {"type": "traffic_spike", "service": "checkout-service", "timestamp": "2026-08-24T09:05:00+00:00", "description": "Request rate 4.2x above 7-day baseline (flash sale campaign)"}

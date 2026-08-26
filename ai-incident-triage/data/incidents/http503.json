@@ -8,15 +8,6 @@
   "priority_hint": "P2",
   "tags": ["http503", "performance", "latency", "product-catalog"],
   "timestamp": "2026-08-24T11:47:52+00:00",
-  "logs": [
-    "2026-08-24T11:45:01Z gateway: WARN upstream product-catalog response time 4820ms exceeds SLA (500ms)",
-    "2026-08-24T11:45:03Z gateway: ERROR upstream product-catalog timed out after 5000ms, returning 503",
-    "2026-08-24T11:45:09Z product-catalog: WARN GC pause 2100ms (old-gen), heap usage 92%",
-    "2026-08-24T11:45:20Z gateway: ERROR upstream product-catalog timed out after 5000ms, returning 503",
-    "2026-08-24T11:46:02Z product-catalog: WARN GC pause 2400ms (old-gen), heap usage 95%",
-    "2026-08-24T11:46:44Z gateway: ERROR upstream product-catalog timed out after 5000ms, returning 503",
-    "2026-08-24T11:47:10Z product-catalog: ERROR OutOfMemoryError: Java heap space during search query execution"
-  ],
   "events": [
     {"type": "traffic_spike", "service": "product-catalog", "timestamp": "2026-08-24T11:30:00+00:00", "description": "Search request volume up 2.6x following a marketing email send"},
     {"type": "deployment", "service": "product-catalog", "timestamp": "2026-08-24T10:00:00+00:00", "description": "Deployed product-catalog v1.19.3 with an updated search-result caching layer"}

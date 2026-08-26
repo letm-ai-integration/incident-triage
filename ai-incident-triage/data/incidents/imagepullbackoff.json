@@ -8,14 +8,6 @@
   "priority_hint": "P2",
   "tags": ["kubernetes", "deployment", "imagepullbackoff", "orders"],
   "timestamp": "2026-08-24T14:02:18+00:00",
-  "logs": [
-    "2026-08-24T14:00:03Z Warning  Failed     pod/orders-api-7f9c8b6d4-abcde  Failed to pull image \"registry.internal/orders-api:v3.8.1\": rpc error: code = Unknown desc = failed to resolve reference: unauthorized",
-    "2026-08-24T14:00:03Z Warning  Failed     pod/orders-api-7f9c8b6d4-abcde  Error: ErrImagePull",
-    "2026-08-24T14:00:18Z Normal   BackOff    pod/orders-api-7f9c8b6d4-abcde  Back-off pulling image \"registry.internal/orders-api:v3.8.1\"",
-    "2026-08-24T14:00:18Z Warning  Failed     pod/orders-api-7f9c8b6d4-abcde  Error: ImagePullBackOff",
-    "2026-08-24T14:01:20Z Warning  Failed     pod/orders-api-7f9c8b6d4-fghij  Failed to pull image \"registry.internal/orders-api:v3.8.1\": rpc error: code = Unknown desc = failed to resolve reference: unauthorized",
-    "2026-08-24T14:01:20Z Warning  Failed     pod/orders-api-7f9c8b6d4-fghij  Error: ImagePullBackOff"
-  ],
   "events": [
     {"type": "deployment", "service": "orders-api", "timestamp": "2026-08-24T13:58:00+00:00", "description": "Rollout of orders-api:v3.8.1 started via CI pipeline"},
     {"type": "config_change", "service": "container-registry", "timestamp": "2026-08-24T13:50:00+00:00", "description": "Registry pull-secret rotated as part of scheduled credential rotation"}

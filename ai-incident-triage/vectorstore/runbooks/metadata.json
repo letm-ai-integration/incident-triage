@@ -10,7 +10,7 @@
   {
     "id": "knowledge_base/runbooks/runbook.md::1::Pod CrashLoopBackOff (OOMKilled)",
     "text": "## Pod CrashLoopBackOff (OOMKilled)\n\n**Alert:** Pod restart count > 5 within 10 minutes, termination reason\nOOMKilled\n**Severity:** High\n**Routing:** platformOnCall\n\n**Impact:**\n- Reduced service capacity\n- Potential request failures during restart windows\n\n**RCA Path:**\n1. `kubectl describe pod <pod>` — confirm OOMKilled as termination reason.\n2. Check memory usage trend over last 24h — gradual climb (leak) vs.\n   sudden spike (traffic burst).\n3. Cross-reference recent deployments.\n\n**Solution:**\n- Roll back to last known-good image if deployment-correlated.\n- If gradual leak: raise memory limit as temporary mitigation, file a\n  follow-up ticket for the leak itself.\n\n---",
-    "metadata": {
+    "metadata": { 
       "source_file": "knowledge_base/runbooks/runbook.md",
       "title": "Pod CrashLoopBackOff (OOMKilled)"
     }

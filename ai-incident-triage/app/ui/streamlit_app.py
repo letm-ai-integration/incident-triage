@@ -29,6 +29,7 @@ from app.domain.enums.priority import Priority
 from app.domain.models.report import IncidentReport
 from app.graph.workflow import triage_graph
 from app.services.classification_service import classification_service
+from app.services.investigation_service import investigation_service
 from app.services.rca_report_service import rca_report_service, render_markdown_report
 
 SAMPLES_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "incidents"
@@ -103,12 +104,17 @@ def _render_sidebar() -> dict[str, Any]:
         "Use LLM-backed agents",
         value=llm_available,
         disabled=not llm_available,
-        help="Classification and root-cause analysis use the real LLM agents instead of rule-based fallbacks.",
+        help=(
+            "Classification, investigation (log analysis + Kubernetes sub-agents, plus the "
+            "runbook RAG lookup), and root-cause analysis use the real agents instead of "
+            "rule-based fallbacks."
+        ),
     )
 
     deps: dict[str, Any] = {"auto_approve": auto_approve}
     if use_llm and llm_available:
         deps["classification_service"] = classification_service
+        deps["investigation_service"] = investigation_service
         deps["rca_report_service"] = rca_report_service
 
     st.sidebar.caption(f"LLM provider configured: {'yes' if llm_available else 'no'}")
