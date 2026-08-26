@@ -1,6 +1,8 @@
-import json
+"""Extracts the typed LogAnalysisResult from a structured-agent invocation."""
+from __future__ import annotations
+
+from typing import Any, List
 from pydantic import BaseModel
-from typing import List
 
 from app.domain.models.evidence import Evidence
 from app.domain.models.hypothesis import Hypothesis
@@ -10,23 +12,13 @@ class LogAnalysisResult(BaseModel):
     hypotheses: List[Hypothesis]
     summary: str
 
-def parse_log_analysis_response(raw_text: str) -> LogAnalysisResult:
-    """Parse the LLM response into LogAnalysisResult."""
-    text = raw_text.strip()
-    if text.startswith("```json"):
-        text = text[7:]
-    elif text.startswith("```"):
-        text = text[3:]
-    if text.endswith("```"):
-        text = text[:-3]
-    text = text.strip()
-    
-    try:
-        data = json.loads(text)
-        return LogAnalysisResult(**data)
-    except Exception as e:
-        return LogAnalysisResult(
-            evidence=[],
-            hypotheses=[],
-            summary=f"Failed to parse LLM response: {str(e)}"
+def parse_log_analysis_response(agent_response: dict[str, Any]) -> LogAnalysisResult:
+    structured = agent_response.get("structured_response")
+    if not isinstance(structured, LogAnalysisResult):
+        if isinstance(agent_response, dict) and "evidence" in agent_response:
+            return LogAnalysisResult(**agent_response)
+        raise TypeError(
+            "LogAnalysis agent did not return a structured_response of type "
+            f"LogAnalysisResult (got {type(structured)!r})."
         )
+    return structured

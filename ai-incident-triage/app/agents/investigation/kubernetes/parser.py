@@ -1,6 +1,8 @@
-import json
+"""Extracts the typed KubernetesAnalysisResult from a structured-agent invocation."""
+from __future__ import annotations
+
+from typing import Any, List
 from pydantic import BaseModel
-from typing import List
 
 from app.domain.models.evidence import Evidence
 from app.domain.models.hypothesis import Hypothesis
@@ -10,23 +12,16 @@ class KubernetesAnalysisResult(BaseModel):
     hypotheses: List[Hypothesis]
     summary: str
 
-def parse_kubernetes_response(raw_text: str) -> KubernetesAnalysisResult:
-    """Parse the LLM response into KubernetesAnalysisResult."""
-    text = raw_text.strip()
-    if text.startswith("```json"):
-        text = text[7:]
-    elif text.startswith("```"):
-        text = text[3:]
-    if text.endswith("```"):
-        text = text[:-3]
-    text = text.strip()
-    
-    try:
-        data = json.loads(text)
-        return KubernetesAnalysisResult(**data)
-    except Exception as e:
-        return KubernetesAnalysisResult(
-            evidence=[],
-            hypotheses=[],
-            summary=f"Failed to parse LLM response: {str(e)}"
+def parse_kubernetes_response(agent_response: dict[str, Any]) -> KubernetesAnalysisResult:
+    structured = agent_response.get("structured_response")
+    # For LangChain create_structured_agent with response_format, the result is sometimes returned under a different key or directly.
+    # But following the classification agent parser pattern:
+    if not isinstance(structured, KubernetesAnalysisResult):
+        # Fallback if the structured agent returns it directly or under a different key
+        if isinstance(agent_response, dict) and "evidence" in agent_response:
+            return KubernetesAnalysisResult(**agent_response)
+        raise TypeError(
+            "Kubernetes agent did not return a structured_response of type "
+            f"KubernetesAnalysisResult (got {type(structured)!r})."
         )
+    return structured
