@@ -9,7 +9,14 @@ of the LLM provider selected for chat).
 """
 from __future__ import annotations
 
+import os
 from functools import lru_cache
+
+# The embedding model is cached locally; default to offline mode so retrieval
+# never depends on Hugging Face connectivity (set the env var explicitly to
+# override).
+os.environ.setdefault("HF_HUB_OFFLINE", "1")
+os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 
 from sentence_transformers import SentenceTransformer
 
@@ -19,7 +26,12 @@ from app.config import get_settings
 @lru_cache(maxsize=1)
 def _load_model() -> SentenceTransformer:
     settings = get_settings()
-    return SentenceTransformer(settings.embedding_model_name)
+    try:
+        # Local-first: never touch the network for the cached embedding model.
+        return SentenceTransformer(settings.embedding_model_name, local_files_only=True)
+    except Exception:  # noqa: BLE001 -- fall back to allowing a one-time download.
+        # Model not cached yet -- allow a one-time download.
+        return SentenceTransformer(settings.embedding_model_name)
 
 
 def embed_texts(texts: list[str]) -> list[list[float]]:

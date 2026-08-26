@@ -1,29 +1,39 @@
 {
-  "incident_id": "INC-K8S-2044",
-  "title": "Orders API pods stuck in ImagePullBackOff after deploy",
-  "description": "The orders-api rollout to v3.8.1 is stuck: new pods are failing to start and are cycling between ErrImagePull and ImagePullBackOff. Old pods are still serving traffic but the deployment cannot progress and no further scaling is possible.",
-  "source": "kubernetes",
-  "service": "orders-api",
+  "incident_id": "INC-K8S-2001",
+  "title": "ImagePullBackOff on payments-worker after deploy",
+  "description": "New pods for payments-worker are stuck in ImagePullBackOff since this morning's rollout. The deployment references tag 0.9.8 which is not present in the container registry.",
+  "source": "pagerduty",
+  "service": "payments-worker",
   "environment": "PRODUCTION",
-  "priority_hint": "P2",
-  "tags": ["kubernetes", "deployment", "imagepullbackoff", "orders"],
-  "timestamp": "2026-08-24T14:02:18+00:00",
+  "priority_hint": "P3",
+  "tags": [
+    "kubernetes",
+    "payments-worker",
+    "imagepull"
+  ],
+  "timestamp": "2026-08-24T08:41:12+00:00",
+  "logs": [],
   "events": [
-    {"type": "deployment", "service": "orders-api", "timestamp": "2026-08-24T13:58:00+00:00", "description": "Rollout of orders-api:v3.8.1 started via CI pipeline"},
-    {"type": "config_change", "service": "container-registry", "timestamp": "2026-08-24T13:50:00+00:00", "description": "Registry pull-secret rotated as part of scheduled credential rotation"}
+    {
+      "type": "deployment",
+      "service": "payments-worker",
+      "timestamp": "2026-08-24T08:30:00+00:00",
+      "description": "Rolled out payments-worker with image tag 0.9.8; rollout stuck at 0/3 ready"
+    }
   ],
   "alerts": [
-    {"name": "KubernetesDeploymentRolloutStuck", "severity": "warning", "fired_at": "2026-08-24T14:01:00+00:00"}
+    {
+      "name": "PodStuckProgressing",
+      "severity": "warning",
+      "fired_at": "2026-08-24T08:40:00+00:00"
+    }
   ],
   "metrics": {
-    "pods_desired": 6,
-    "pods_ready": 3,
-    "pods_image_pull_backoff": 3,
-    "rollout_progress_pct": 50
+    "replicas_ready": 0,
+    "replicas_desired": 3
   },
   "metadata": {
-    "cluster": "prod-ap-southeast-2",
-    "namespace": "orders",
+    "region": "us-east-1",
     "on_call_team": "PLATFORM"
   }
 }

@@ -17,6 +17,8 @@
 # rca_report, approval, verification, notification.
 from __future__ import annotations
 
+import functools
+import logging
 import re
 from typing import Any, Callable, Mapping, Optional
 
@@ -39,6 +41,26 @@ __all__ = [
 
 class GraphBuildError(Exception):
     """Raised when a graph is assembled with an invalid node/edge definition."""
+
+
+logger = logging.getLogger(__name__)
+
+
+def _wrap_node_with_logging(name: str, node: Callable) -> Callable:
+    """Wrap a node so every graph execution logs that the node was accessed."""
+
+    @functools.wraps(node)
+    def _wrapped(state: Any, *args: Any, **kwargs: Any) -> Any:
+        logger.info("[graph] -> node '%s' entered", name)
+        try:
+            result = node(state, *args, **kwargs)
+        except Exception:
+            logger.exception("[graph] node '%s' raised an exception", name)
+            raise
+        logger.info("[graph] <- node '%s' completed", name)
+        return result
+
+    return _wrapped
 
 
 _NODE_NAMES_ATTR = "_graph_node_names"
@@ -96,7 +118,7 @@ def add_node(graph: StateGraph, name: str, node: Callable) -> None:
         raise GraphBuildError(f"duplicate node {name!r}: a node with this name is already registered")
     if not callable(node):
         raise GraphBuildError(f"node {name!r} must be callable, got {type(node).__name__}")
-    graph.add_node(name, node)
+    graph.add_node(name, _wrap_node_with_logging(name, node))
     _node_names(graph).add(name)
 
 

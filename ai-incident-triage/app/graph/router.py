@@ -10,10 +10,16 @@
 #   classification -> investigation | notification   (by Priority / IncidentType)
 #   approval       -> verification | notification    (approved vs rejected)
 #   verification   -> investigation | notification   (reinvestigate loop vs done)
+from __future__ import annotations
+
+import logging
+
 from app.domain.constants import MAX_INVESTIGATION_RETRIES
 from app.domain.enums.incident_type import IncidentType
 from app.domain.enums.priority import Priority
 from app.graph.state import IncidentState
+
+logger = logging.getLogger(__name__)
 
 
 def route_after_classification(state: IncidentState) -> str:
@@ -25,14 +31,27 @@ def route_after_classification(state: IncidentState) -> str:
     """
     classification = state.get("classification")
     if classification is None:
-        return "auto_resolve"
+        logger.warning(
+            "[router] classification is None (classification node failed) "
+            "-> routing to full_investigation with rule-based agents instead of auto_resolve"
+        )
+        return "full_investigation"
     if classification.incident_type == IncidentType.UNKNOWN:
-        return "full_investigation"
-    if classification.priority in (Priority.P1, Priority.P2):
-        return "full_investigation"
-    if classification.priority == Priority.P4:
-        return "auto_resolve"
-    return "full_investigation"
+        decision = "full_investigation"
+    elif classification.priority in (Priority.P1, Priority.P2):
+        decision = "full_investigation"
+    elif classification.priority == Priority.P4:
+        decision = "auto_resolve"
+    else:
+        decision = "full_investigation"
+    logger.info(
+        "[router] route_after_classification -> %s (type=%s priority=%s confidence=%.2f)",
+        decision,
+        classification.incident_type.value,
+        classification.priority.value,
+        classification.confidence,
+    )
+    return decision
 
 
 def route_after_approval(state: IncidentState) -> str:

@@ -1,0 +1,10 @@
+# Streamlit app configuration.
+#
+# fileWatcherType = "none" disables Streamlit's module source watcher. The
+# default watcher walks every imported module (including transformers inside
+# .venv, pulled in via sentence-transformers) and spams harmless
+# ModuleNotFoundError: torchvision tracebacks at startup for image-processor
+# modules we never use. Trade-off: pages no longer auto-reload on code edits;
+# restart `uv run streamlit run ...` to pick up changes.
+[server]
+fileWatcherType = "none"

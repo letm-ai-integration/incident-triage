@@ -17,11 +17,15 @@ never needs to duplicate graph/service logic.
 from __future__ import annotations
 
 import json
+import logging
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import streamlit as st
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
+logger = logging.getLogger("streamlit_app")
 
 from app.config import get_settings
 from app.domain.enums.environment import Environment
@@ -30,6 +34,7 @@ from app.domain.models.report import IncidentReport
 from app.graph.workflow import triage_graph
 from app.services.classification_service import classification_service
 from app.services.investigation_service import investigation_service
+from app.services.notification_service import notification_service
 from app.services.rca_report_service import rca_report_service, render_markdown_report
 
 SAMPLES_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "incidents"
@@ -111,7 +116,14 @@ def _render_sidebar() -> dict[str, Any]:
         ),
     )
 
-    deps: dict[str, Any] = {"auto_approve": auto_approve}
+    deps: dict[str, Any] = {
+        "auto_approve": auto_approve,
+        # Investigation/notification services work without an LLM key (they
+        # fall back to deterministic sub-agent analysis internally), so they
+        # are wired unconditionally -- same as the CLI entry point.
+        "investigation_service": investigation_service,
+        "notification_service": notification_service,
+    }
     if use_llm and llm_available:
         deps["classification_service"] = classification_service
         deps["investigation_service"] = investigation_service
@@ -219,6 +231,7 @@ def _render_json_tab(samples: dict[str, dict[str, Any]]) -> None:
 
 def _run_triage(raw_input: dict[str, Any]) -> None:
     deps = st.session_state.get("deps", {"auto_approve": True})
+    logger.info("[streamlit] starting triage run with deps=%s", sorted(deps.keys()))
     with st.spinner("Running triage pipeline..."):
         try:
             result = triage_graph.invoke(
@@ -226,8 +239,13 @@ def _run_triage(raw_input: dict[str, Any]) -> None:
                 config={"configurable": {"deps": deps}, "recursion_limit": RECURSION_LIMIT},
             )
         except Exception as exc:  # noqa: BLE001 -- surface a short message, never a raw traceback
+            logger.exception("[streamlit] triage graph invocation failed")
             st.error(f"Triage failed: {exc}")
             return
+    if result.get("errors"):
+        logger.error("[streamlit] pipeline completed with errors: %s", result["errors"])
+    else:
+        logger.info("[streamlit] triage run completed without errors")
     st.session_state["result"] = result
 
 
@@ -266,7 +284,10 @@ def _render_results(result: dict[str, Any]) -> None:
             mime="application/json",
         )
     else:
-        st.warning("No incident report was produced (the incident may have been auto-resolved without a full investigation).")
+        if result.get("errors"):
+            st.warning("No incident report was produced because the pipeline hit errors (see below).")
+        else:
+            st.warning("No incident report was produced (the incident may have been auto-resolved without a full investigation).")
 
     if result.get("errors"):
         st.error("Pipeline errors:\n" + "\n".join(f"- {e}" for e in result["errors"]))

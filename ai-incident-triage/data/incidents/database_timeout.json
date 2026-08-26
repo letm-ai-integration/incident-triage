@@ -1,19 +1,38 @@
 {
   "incident_id": "INC-DB-1001",
-  "title": "Checkout database connection pool exhausted",
+  "title": "Database connection pool exhausted on checkout-db",
   "description": "Customers on the checkout page are seeing intermittent 'unable to complete order' errors. Application logs show the checkout service repeatedly failing to acquire a connection from the primary database pool during a traffic spike.",
   "source": "pagerduty",
   "service": "checkout-db",
   "environment": "PRODUCTION",
   "priority_hint": "P1",
-  "tags": ["database", "checkout", "connection-pool", "timeout"],
+  "tags": [
+    "database",
+    "checkout",
+    "connection-pool",
+    "timeout"
+  ],
   "timestamp": "2026-08-24T09:14:32+00:00",
   "events": [
-    {"type": "deployment", "service": "checkout-service", "timestamp": "2026-08-24T08:55:00+00:00", "description": "Rolled out checkout-service v2.14.0 (raised default query timeout, no pool size change)"},
-    {"type": "traffic_spike", "service": "checkout-service", "timestamp": "2026-08-24T09:05:00+00:00", "description": "Request rate 4.2x above 7-day baseline (flash sale campaign)"}
+    {
+      "type": "deployment",
+      "service": "checkout-service",
+      "timestamp": "2026-08-24T08:55:00+00:00",
+      "description": "Rolled out checkout-service v2.14.0 (raised default query timeout, no pool size change)"
+    },
+    {
+      "type": "traffic_spike",
+      "service": "checkout-service",
+      "timestamp": "2026-08-24T09:05:00+00:00",
+      "description": "Request rate 4.2x above 7-day baseline (flash sale campaign)"
+    }
   ],
   "alerts": [
-    {"name": "DatabaseConnectionPoolSaturation", "severity": "critical", "fired_at": "2026-08-24T09:12:00+00:00"}
+    {
+      "name": "DatabaseConnectionPoolSaturation",
+      "severity": "critical",
+      "fired_at": "2026-08-24T09:12:00+00:00"
+    }
   ],
   "metrics": {
     "db_pool_active_connections": 100,
