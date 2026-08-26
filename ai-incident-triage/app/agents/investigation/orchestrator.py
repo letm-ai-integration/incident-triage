@@ -1,34 +1,44 @@
-"""Investigation Agent: orchestrates the parallel investigation sub-agents.
+"""Investigation orchestrator: coordinates the parallel investigation sub-agents.
 
-Fans out to Log Analysis, Kubernetes, and Runbook in parallel (mirroring the
-"Investigation Agent" stage in updated-flow-v2.md), then consolidates their
-findings into the aggregated evidence/hypotheses lists that
-investigation_summary and rca_report already consume. Pure agent-layer code --
-no LangGraph/state coupling; ``app.services.investigation_service`` does the
-state translation.
+This is the single place that knows about all three sub-agents:
 
-Each sub-agent is isolated in its own try/except so one failing (bad LLM
-response, network error, missing knowledge base) never sinks the other two --
-the orchestrator always returns a full ``InvestigationOutcome`` with a
-per-source Evidence entry describing what happened.
+- ``LogAnalysisAgent``   (app/agents/investigation/log_analysis) -- LLM-backed,
+  falls back to deterministic keyword analysis of the incident's own logs when
+  no LLM is available.
+- ``KubernetesAgent``    (app/agents/investigation/kubernetes)     -- LLM-backed,
+  same fallback strategy over the incident's raw events/alerts.
+- runbook agent          (app/agents/investigation/runbook)       -- RAG-based
+  FAISS retrieval; needs no chat LLM at all.
+
+The orchestrator never raises for agent failures: a failing sub-agent becomes
+an ``Evidence`` item with ``severity="info"`` describing the failure, so one
+broken dependency degrades the investigation instead of killing the graph run.
 """
 from __future__ import annotations
 
-import asyncio
-import uuid
+import logging
 from dataclasses import dataclass, field
 
 from app.agents.investigation.kubernetes.agent import KubernetesAgent
 from app.agents.investigation.log_analysis.agent import LogAnalysisAgent
-from app.agents.investigation.runbook.agent import run_runbook_agent
+from app.agents.investigation.runbook.agent import (
+    MIN_RELEVANCE_SCORE,
+    run_runbook_agent,
+)
+from app.domain.enums.incident_type import IncidentType
 from app.domain.models.classification import ClassificationResult
 from app.domain.models.evidence import Evidence
-from app.domain.models.hypothesis import Hypothesis
+from app.domain.models.hypothesis import Hypothesis, HypothesisLabel
 from app.domain.models.incident import Incident
-from app.graph.state import RunbookResult, RunbookStatus
-from app.llm.client import get_chat_model
 from app.tools.mock.kubernetes import MockKubernetesTool
 from app.tools.mock.logs import MockLogTool
+
+logger = logging.getLogger(__name__)
+
+_SIGNALS = (
+    "error", "fail", "timeout", "exception", "connection", "refused",
+    "crash", "oom", "unavailable", "exhausted", "back-off",
+)
 
 
 @dataclass
@@ -36,84 +46,266 @@ class InvestigationOutcome:
     evidence: list[Evidence] = field(default_factory=list)
     hypotheses: list[Hypothesis] = field(default_factory=list)
     log_analysis: Evidence | None = None
-    runbook_analysis: Evidence | None = None
     kubernetes_analysis: Evidence | None = None
+    runbook_analysis: Evidence | None = None
+    confidence: float = 0.35
 
 
-def _fallback_evidence(source: str, finding: str, severity: str = "unknown") -> Evidence:
-    return Evidence(evidence_id=f"ev-{source}-{uuid.uuid4().hex[:8]}", source=source, finding=finding, severity=severity)
+def _tool_incident_type(incident: Incident, classification: ClassificationResult | None) -> str:
+    """Map the incident to the mock tools' type vocabulary."""
+    if classification is not None:
+        mapping = {
+            IncidentType.DATABASE: "DATABASE",
+            IncidentType.KUBERNETES: "KUBERNETES",
+        }
+        if classification.incident_type in mapping:
+            return mapping[classification.incident_type]
+        return "APPLICATION"
+    return str(incident.tags[0]) if incident.tags else "APPLICATION"
 
 
-async def _run_log_analysis(
-    incident: Incident, model: str | None
-) -> tuple[Evidence, list[Evidence], list[Hypothesis]]:
+def _keyword_signals(texts: list[str]) -> list[str]:
+    lowered = [t.lower() for t in texts if t]
+    return [kw for kw in _SIGNALS if any(kw in t for t in lowered)]
+
+
+async def _log_evidence(
+    incident: Incident, llm, classification: ClassificationResult | None = None
+) -> Evidence:
+    """Log analysis via the LLM agent when available, else keyword fallback.
+
+    The deterministic fallback scans the incident's own telemetry -- raw logs
+    plus description and alert names, since mock incidents often carry their
+    strongest signals outside ``raw_logs``.
+    """
     try:
-        agent = LogAnalysisAgent(get_chat_model(model=model), MockLogTool())
-        result = await agent.run(incident)
-    except Exception as exc:  # noqa: BLE001 -- isolate this sub-agent's failure from the other two
-        failure = _fallback_evidence("log_analysis", f"Log analysis investigation failed: {exc}")
-        return failure, [failure], []
-    if result.evidence:
-        return result.evidence[0], result.evidence, result.hypotheses
-    fallback = _fallback_evidence("log_analysis", result.summary or "No log evidence returned.", "info")
-    return fallback, [fallback], result.hypotheses
-
-
-async def _run_kubernetes(
-    incident: Incident, model: str | None
-) -> tuple[Evidence, list[Evidence], list[Hypothesis]]:
-    try:
-        agent = KubernetesAgent(get_chat_model(model=model), MockKubernetesTool())
-        result = await agent.run(incident)
-    except Exception as exc:  # noqa: BLE001 -- isolate this sub-agent's failure from the other two
-        failure = _fallback_evidence("kubernetes", f"Kubernetes investigation failed: {exc}")
-        return failure, [failure], []
-    if result.evidence:
-        return result.evidence[0], result.evidence, result.hypotheses
-    fallback = _fallback_evidence("kubernetes", result.summary or "No Kubernetes evidence returned.", "info")
-    return fallback, [fallback], result.hypotheses
-
-
-def _run_runbook(
-    incident: Incident, classification: ClassificationResult | None
-) -> tuple[Evidence, list[Hypothesis]]:
-    try:
-        result: RunbookResult = run_runbook_agent(incident.model_dump(), classification)
-    except Exception as exc:  # noqa: BLE001 -- backstop; run_runbook_agent already catches its own errors
-        return _fallback_evidence("runbook", f"Runbook lookup failed: {exc}"), []
-
-    if result.status == RunbookStatus.MATCHED and result.hypothesis is not None:
-        score = result.score if result.score is not None else 0.0
-        evidence = _fallback_evidence(
-            "runbook", f"Matched runbook '{result.matched_title}' (relevance score {score:.2f}).", "medium"
+        if llm is not None:
+            result = await LogAnalysisAgent(llm, MockLogTool()).run(
+                incident, classification
+            )
+            finding = result.summary or "Log analysis completed."
+            signals = _keyword_signals([finding])
+        else:
+            texts = list(incident.raw_logs) + [incident.description]
+            texts += [
+                str(a.get("alert_name") or a.get("name") or "") if isinstance(a, dict) else str(a)
+                for a in incident.raw_alerts
+            ]
+            matched = _keyword_signals(texts)
+            finding = (
+                f"Found error signals in incident telemetry: {', '.join(matched[:5])}."
+                if matched else "No error signals detected in logs."
+            )
+            signals = matched
+        return Evidence(
+            evidence_id="ev-log-1",
+            source="log_analysis",
+            finding=finding,
+            severity="high" if signals else "info",
+            raw_data={"matched_signals": signals[:10], "log_count": len(incident.raw_logs)},
         )
-        return evidence, [result.hypothesis]
-    if result.status == RunbookStatus.NO_MATCH:
-        return _fallback_evidence("runbook", "No matching runbook found for this incident.", "info"), []
-    return _fallback_evidence("runbook", f"Runbook lookup error: {result.error}", "unknown"), []
+    except Exception as exc:  # noqa: BLE001 -- degrade, never kill the run
+        return Evidence(
+            evidence_id="ev-log-1",
+            source="log_analysis",
+            finding=f"Log analysis failed: {exc}",
+            severity="info",
+            raw_data={"error": str(exc)},
+        )
+
+
+async def _kubernetes_evidence(
+    incident: Incident, classification: ClassificationResult | None, llm
+) -> Evidence:
+    """Kubernetes analysis via the LLM agent when available, else fallback."""
+    try:
+        incident_type = _tool_incident_type(incident, classification)
+        tool_output = await MockKubernetesTool().run(
+            incident_type=incident_type, service=incident.service,
+            namespace=incident.metadata.get("namespace", "default"),
+        )
+        if llm is not None:
+            result = await KubernetesAgent(llm, MockKubernetesTool()).run(
+                incident, classification
+            )
+            degraded = bool(result.hypotheses)
+        else:
+            # Deterministic mode analyzes only the incident's OWN telemetry;
+            # the mock tool's canned template events would otherwise fabricate
+            # degradation for incidents that have none.
+            events_text = " ".join(str(e) for e in incident.raw_events)
+            alerts = " ".join(
+                str(a.get("alert_name") or a.get("name") or "") if isinstance(a, dict) else str(a)
+                for a in incident.raw_alerts
+            )
+            degraded = bool(_keyword_signals([events_text, alerts]))
+        finding = (
+            "Workload health check flagged degradation in pod status/events."
+            if degraded else "Workload health check passed."
+        )
+        return Evidence(
+            evidence_id="ev-k8s-1",
+            source="kubernetes",
+            finding=finding,
+            severity="medium" if degraded else "info",
+            raw_data={
+                "pod_statuses": list(tool_output.pod_statuses),
+                "recent_events": list(tool_output.recent_events),
+                "degraded": degraded,
+            },
+        )
+    except Exception as exc:  # noqa: BLE001
+        return Evidence(
+            evidence_id="ev-k8s-1",
+            source="kubernetes",
+            finding=f"Kubernetes analysis failed: {exc}",
+            severity="info",
+            raw_data={"error": str(exc)},
+        )
+
+
+def _runbook_evidence(
+    alert_data: dict, classification: ClassificationResult | None
+) -> tuple[Evidence, Hypothesis | None]:
+    """Runbook retrieval via the RAG-based runbook agent (no chat LLM needed)."""
+    result = run_runbook_agent(alert_data, classification)
+    if result.status.value == "MATCHED" and result.hypothesis is not None:
+        evidence = Evidence(
+            evidence_id="ev-rb-1",
+            source="runbook",
+            finding=f"Matched runbook '{result.matched_title}' "
+                    f"(score {result.score:.2f}).",
+            severity="info" if result.score < MIN_RELEVANCE_SCORE else "medium",
+            raw_data={
+                "matched_runbooks": [result.matched_title],
+                "score": result.score,
+            },
+        )
+        return evidence, result.hypothesis
+    reason = result.error or "No matching runbook found for this incident pattern."
+    return (
+        Evidence(
+            evidence_id="ev-rb-1",
+            source="runbook",
+            finding=reason,
+            severity="info",
+            raw_data={"matched_runbooks": []},
+        ),
+        None,
+    )
+
+
+def _synthesize_outcome(
+    log_evidence: Evidence,
+    kubernetes_evidence: Evidence,
+    runbook_evidence: Evidence,
+    runbook_hypothesis: Hypothesis | None,
+) -> tuple[list[Evidence], list[Hypothesis], float]:
+    """Aggregate per-subagent outputs into evidence, hypotheses, confidence.
+
+    Confidence reflects how much *independent* evidence converged:
+    base 0.35, +0.25 for error signals in logs, +0.2 for degraded k8s
+    state, +0.15 for a matched runbook -- capped at 0.95. A runbook match
+    alone is never enough: without at least one corroborating error signal
+    from telemetry the outcome stays below the resolution threshold (0.5)
+    so verification correctly sends it through the reinvestigation loop.
+    """
+    evidence = [log_evidence, runbook_evidence, kubernetes_evidence]
+
+    confidence = 0.35
+    if log_evidence.severity == "high":
+        confidence += 0.25
+    if kubernetes_evidence.severity != "info":
+        confidence += 0.2
+    if runbook_hypothesis is not None:
+        confidence += 0.15
+    if log_evidence.severity == "info" and kubernetes_evidence.severity == "info":
+        confidence = min(confidence, 0.45)
+    confidence = min(confidence, 0.95)
+
+    primary = Hypothesis(
+        hypothesis_id="hyp-1",
+        description=(
+            f"Primary cause relates to: {runbook_hypothesis.description[:200]}"
+            if runbook_hypothesis is not None and confidence >= 0.5
+            else f"Incident signals: {log_evidence.finding} "
+                 f"{kubernetes_evidence.finding}"
+        ),
+        confidence=confidence,
+        supporting_evidence=[e.evidence_id for e in evidence if e.severity != "info"],
+        contradicting_evidence=[],
+        label=HypothesisLabel.LIKELY if confidence >= 0.7 else HypothesisLabel.POSSIBLE,
+    )
+    hypotheses = [primary]
+    if runbook_hypothesis is not None:
+        if log_evidence.severity == "info" and kubernetes_evidence.severity == "info":
+            # A retrieval hit alone must not masquerade as a high-confidence
+            # root cause: with zero corroborating telemetry it stays below the
+            # resolution threshold so verification routes to reinvestigation.
+            runbook_hypothesis = runbook_hypothesis.model_copy(
+                update={
+                    "confidence": min(runbook_hypothesis.confidence, 0.45),
+                    "label": HypothesisLabel.POSSIBLE,
+                }
+            )
+        hypotheses.append(runbook_hypothesis)
+    return evidence, hypotheses, confidence
 
 
 async def run_investigation(
     incident: Incident,
     classification: ClassificationResult | None = None,
-    log_analysis_model: str | None = None,
-    kubernetes_model: str | None = None,
+    llm=None,
 ) -> InvestigationOutcome:
-    """Fan out to Log Analysis, Kubernetes, and Runbook in parallel, then consolidate."""
-    (log_representative, log_evidence, log_hypotheses), (
-        kubernetes_representative,
-        kubernetes_evidence,
-        kubernetes_hypotheses,
-    ), (runbook_representative, runbook_hypotheses) = await asyncio.gather(
-        _run_log_analysis(incident, log_analysis_model),
-        _run_kubernetes(incident, kubernetes_model),
-        asyncio.to_thread(_run_runbook, incident, classification),
-    )
+    """Coordinate the investigation phase and return the aggregated outcome.
 
-    return InvestigationOutcome(
-        evidence=[*log_evidence, runbook_representative, *kubernetes_evidence],
-        hypotheses=[*log_hypotheses, *runbook_hypotheses, *kubernetes_hypotheses],
-        log_analysis=log_representative,
-        runbook_analysis=runbook_representative,
-        kubernetes_analysis=kubernetes_representative,
+    The three sub-agents are executed through the compiled investigation
+    phase subgraph (app/agents/investigation/subgraph.py): log analysis,
+    Kubernetes, and runbook retrieval start in parallel; a synthesize node
+    then aggregates their outputs. This function stays the single owner of
+    the phase -- it prepares inputs, runs the subgraph, and maps the result
+    onto ``InvestigationOutcome`` which the graph service writes into shared
+    state (see app/services/investigation_service.py).
+    """
+    # Local import: the subgraph imports this module's sub-agent wrappers.
+    from app.agents.investigation.subgraph import investigation_phase_graph
+
+    logger.info(
+        "[investigation.orchestrator] starting investigation incident=%s llm_backed=%s",
+        incident.incident_id,
+        llm is not None,
     )
+    result = await investigation_phase_graph.ainvoke(
+        {"incident": incident, "classification": classification, "llm": llm}
+    )
+    outcome = InvestigationOutcome(
+        evidence=result["evidence"],
+        hypotheses=result["hypotheses"],
+        log_analysis=result["log_analysis"],
+        kubernetes_analysis=result["kubernetes_analysis"],
+        runbook_analysis=result["runbook_analysis"],
+        confidence=result["confidence"],
+    )
+    logger.info(
+        "[investigation.orchestrator] completed incident=%s confidence=%.2f "
+        "evidence_count=%d hypotheses=%d log_severity=%s k8s_severity=%s runbook=%r",
+        incident.incident_id,
+        outcome.confidence,
+        len(outcome.evidence),
+        len(outcome.hypotheses),
+        outcome.log_analysis.severity if outcome.log_analysis else "n/a",
+        outcome.kubernetes_analysis.severity if outcome.kubernetes_analysis else "n/a",
+        outcome.runbook_analysis.finding[:80] if outcome.runbook_analysis else "n/a",
+    )
+    return outcome
+
+
+def investigate(
+    incident: Incident,
+    classification: ClassificationResult | None = None,
+    llm=None,
+) -> InvestigationOutcome:
+    """Synchronous entry point for graph nodes/services (asyncio.run bridge)."""
+    import asyncio
+
+    return asyncio.run(run_investigation(incident, classification, llm=llm))

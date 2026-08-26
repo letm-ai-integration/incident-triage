@@ -4,9 +4,13 @@ resolution. Callers pass a fully-formed message; this module only sends it.
 """
 from __future__ import annotations
 
+import logging
+
 import resend
 
 from app.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 
 class EmailSendError(Exception):
@@ -21,6 +25,12 @@ def send_email(to: str, subject: str, html_body: str) -> str:
 
     resend.api_key = settings.resend_api_key
 
+    logger.info(
+        "[resend.adapter] sending email to=%s from=%s subject=%r",
+        to,
+        f"{settings.resend_from_name} <{settings.resend_from_email}>",
+        subject,
+    )
     try:
         response = resend.Emails.send(
             {
@@ -31,6 +41,8 @@ def send_email(to: str, subject: str, html_body: str) -> str:
             }
         )
     except Exception as e:
+        logger.error("[resend.adapter] send failed: %s", e)
         raise EmailSendError(f"Failed to send email via Resend: {e}") from e
 
+    logger.info("[resend.adapter] sent successfully message_id=%s", response["id"])
     return response["id"]

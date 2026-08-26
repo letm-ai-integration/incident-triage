@@ -3,6 +3,7 @@
 # flattened state scalars. Absorbs the former v1 severity node.
 from __future__ import annotations
 
+import logging
 from typing import Optional
 
 from langchain_core.runnables import RunnableConfig
@@ -14,6 +15,8 @@ from app.domain.enums.team import Team
 from app.domain.models.classification import ClassificationResult
 from app.graph.builder import get_deps
 from app.graph.state import IncidentState
+
+logger = logging.getLogger(__name__)
 
 _TYPE_KEYWORDS = {
     IncidentType.KUBERNETES: (
@@ -35,6 +38,14 @@ _TYPE_KEYWORDS = {
         "cpu", "memory", "slow", "performance", "high latency", "throttl",
         "saturation", "503", "http 503",
     ),
+    IncidentType.THIRD_PARTY: (
+        "third-party", "third party", "external api", "vendor", "provider",
+        "upstream dependency", "payment gateway",
+    ),
+    IncidentType.DEPLOYMENT: (
+        "deployment", "deploy", "release", "rollout", "rolled back",
+        "rollback", "regression",
+    ),
     IncidentType.INFRASTRUCTURE: (
         "infrastructure", "vm", "host", "disk", "storage", "hardware",
     ),
@@ -47,6 +58,8 @@ _TEAMS_BY_TYPE = {
     IncidentType.SECURITY: [Team.SECURITY],
     IncidentType.APPLICATION: [Team.BACKEND],
     IncidentType.PERFORMANCE: [Team.SRE],
+    IncidentType.THIRD_PARTY: [Team.BACKEND, Team.NETWORK],
+    IncidentType.DEPLOYMENT: [Team.SRE, Team.BACKEND],
     IncidentType.INFRASTRUCTURE: [Team.SRE],
     IncidentType.UNKNOWN: [Team.ON_CALL],
 }
@@ -62,10 +75,31 @@ def classification_node(state: IncidentState, config: Optional[RunnableConfig] =
     """Produce a ``ClassificationResult`` (category + severity) for the incident."""
     deps = get_deps(config)
     service = deps.get("classification_service", _default_classify)
+    logger.info("[classification_node] service=%s", getattr(service, "__name__", type(service).__name__))
     try:
         update = service(state, deps)
+        logger.info(
+            "[classification_node] ok: type=%s priority=%s confidence=%s",
+            update.get("incident_type"),
+            update.get("severity"),
+            update.get("classification_confidence"),
+        )
     except Exception as exc:
-        update = {"errors": state.get("errors", []) + [f"classification failed: {exc}"]}
+        logger.exception(
+            "[classification_node] classification service failed (%s: %s); "
+            "falling back to rule-based classification so the pipeline continues",
+            type(exc).__name__,
+            exc,
+        )
+        update = _default_classify(state, deps)
+        update["errors"] = state.get("errors", []) + [
+            f"classification failed ({type(exc).__name__}: {exc}); used rule-based fallback"
+        ]
+        logger.warning(
+            "[classification_node] fallback result: type=%s priority=%s",
+            update.get("incident_type"),
+            update.get("severity"),
+        )
     update.setdefault("current_step", "classification")
     return update
 
@@ -80,7 +114,7 @@ def _default_classify(state: IncidentState, deps: dict) -> dict:
         incident_type=incident_type,
         priority=priority,
         confidence=0.8,
-        reasoning="Rule-based keyword classification (fallback while classification_service is unimplemented).",
+        reasoning="Rule-based keyword classification (used when the LLM classification service is unavailable or fails).",
         affected_services=[incident.service] if incident else [],
         suggested_teams=_TEAMS_BY_TYPE[incident_type],
         rule_based_priority=priority,

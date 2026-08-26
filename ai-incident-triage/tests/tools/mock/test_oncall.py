@@ -19,7 +19,7 @@ def test_parses_oncall_file(tmp_path, monkeypatch):
         tmp_path,
         "Name: Ayush Sharma\n"
         "Role: Backend On-Call Engineer\n"
-        "Email: ayush.sharma@example.com\n"
+        "Email: cocruxexoipra-2710@yopmail.com\n"
         "Team: backend\n"
         "Status: on-call\n",
     )
@@ -30,7 +30,7 @@ def test_parses_oncall_file(tmp_path, monkeypatch):
     assert isinstance(contact, OnCallContact)
     assert contact.name == "Ayush Sharma"
     assert contact.role == "Backend On-Call Engineer"
-    assert contact.email == "ayush.sharma@example.com"
+    assert contact.email == "cocruxexoipra-2710@yopmail.com"
     assert contact.team == "backend"
     assert contact.status == "on-call"
 
@@ -41,7 +41,7 @@ def test_ignores_lines_without_colon(tmp_path, monkeypatch):
         "Name: Ayush Sharma\n"
         "just some text\n"
         "Role: Backend On-Call Engineer\n"
-        "Email: ayush.sharma@example.com\n"
+        "Email: cocruxexoipra-2710@yopmail.com\n"
         "\n"
         "Team: backend\n"
         "Status: on-call\n",
@@ -51,7 +51,7 @@ def test_ignores_lines_without_colon(tmp_path, monkeypatch):
     contact = get_current_oncall()
 
     assert contact.name == "Ayush Sharma"
-    assert contact.email == "ayush.sharma@example.com"
+    assert contact.email == "cocruxexoipra-2710@yopmail.com"
     assert contact.team == "backend"
 
 
@@ -60,7 +60,7 @@ def test_trims_surrounding_whitespace(tmp_path, monkeypatch):
         tmp_path,
         "  Name:   Ayush Sharma  \n"
         "Role:  Backend On-Call Engineer  \n"
-        "Email: ayush.sharma@example.com\n"
+        "Email: cocruxexoipra-2710@yopmail.com\n"
         "Team: backend\n"
         "Status: on-call\n",
     )

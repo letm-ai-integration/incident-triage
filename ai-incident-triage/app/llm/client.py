@@ -18,6 +18,7 @@ now that they build the chat model from the active provider config.
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any, TypeVar
@@ -30,6 +31,8 @@ from pydantic import BaseModel, SecretStr
 from app.config import get_settings
 
 T = TypeVar("T", bound=BaseModel)
+
+logger = logging.getLogger(__name__)
 
 
 class LLMConfigurationError(RuntimeError):
@@ -51,6 +54,14 @@ def _resolve_provider_config() -> _ProviderConfig:
             f"Missing API key for active LLM provider '{settings.llm_provider.value}'. "
             "Set it in .env."
         )
+    logger.info(
+        "[llm.client] resolved provider=%s base_url=%s model=%s api_key=***%s timeout=%ss",
+        settings.llm_provider.value,
+        cfg["base_url"],
+        cfg["model"],
+        cfg["api_key"][-4:],
+        settings.llm_timeout,
+    )
     return _ProviderConfig(api_key=cfg["api_key"], base_url=cfg["base_url"], model=cfg["model"])
 
 
@@ -61,7 +72,13 @@ def get_client(**kwargs: Any) -> OpenAI:
     completion helpers in agent code.
     """
     cfg = _resolve_provider_config()
-    return OpenAI(api_key=cfg.api_key, base_url=cfg.base_url, timeout=get_settings().llm_timeout, **kwargs)
+    return OpenAI(
+        api_key=cfg.api_key,
+        base_url=cfg.base_url,
+        timeout=get_settings().llm_timeout,
+        max_retries=get_settings().llm_max_retries,
+        **kwargs,
+    )
 
 
 def get_async_client(**kwargs: Any) -> AsyncOpenAI:
@@ -84,6 +101,10 @@ def get_chat_model(model: str | None = None, temperature: float | None = None, *
     settings = get_settings()
     if temperature is None:
         temperature = settings.llm_temperature
+    logger.debug(
+        "[llm.client] creating ChatOpenAI model=%s base_url=%s temperature=%s max_tokens=%s max_retries=%s",
+        resolved_model, cfg.base_url, temperature, settings.llm_max_tokens, settings.llm_max_retries,
+    )
     return ChatOpenAI(
         model=resolved_model,
         api_key=SecretStr(cfg.api_key),
@@ -91,6 +112,7 @@ def get_chat_model(model: str | None = None, temperature: float | None = None, *
         temperature=temperature,
         max_tokens=settings.llm_max_tokens,
         timeout=settings.llm_timeout,
+        max_retries=settings.llm_max_retries,
         **kwargs,
     )
 

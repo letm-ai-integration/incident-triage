@@ -12,6 +12,8 @@ per-agent typed I/O principle.
 """
 from __future__ import annotations
 
+import logging
+
 from app.agents.rca_report.parser import parse_rca_response
 from app.agents.rca_report.prompt import SYSTEM_PROMPT, build_user_prompt
 from app.domain.models.classification import ClassificationResult
@@ -21,6 +23,8 @@ from app.domain.models.incident import Incident
 from app.domain.models.root_cause import RootCauseAnalysis
 from app.llm.client import create_structured_agent
 from app.rules.confidence import compute_confidence_ceiling
+
+logger = logging.getLogger(__name__)
 
 
 def generate_root_cause_analysis(
@@ -38,23 +42,48 @@ def generate_root_cause_analysis(
     them from nothing.
     """
     ceiling = compute_confidence_ceiling(hypotheses)
+    logger.info(
+        "[rca_report.agent] generating RCA incident=%s evidence_count=%d hypotheses=%d ceiling=%.2f",
+        incident.incident_id,
+        len(evidence.evidence) if hasattr(evidence, "evidence") else -1,
+        len(hypotheses),
+        ceiling,
+    )
     agent = create_structured_agent(
         system_prompt=SYSTEM_PROMPT,
         output_schema=RootCauseAnalysis,
         model=model,
     )
-    response = agent.invoke(
-        {
-            "messages": [
-                {
-                    "role": "user",
-                    "content": build_user_prompt(incident, classification, evidence, hypotheses, ceiling),
-                }
-            ]
-        }
-    )
+    try:
+        response = agent.invoke(
+            {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": build_user_prompt(incident, classification, evidence, hypotheses, ceiling),
+                    }
+                ]
+            }
+        )
+    except Exception:
+        logger.exception(
+            "[rca_report.agent] LLM invocation failed -- check provider base_url "
+            "reachability, API key, and network/proxy settings"
+        )
+        raise
     rca = parse_rca_response(response)
-    return _reconcile_with_ceiling(rca, ceiling)
+    reconciled = _reconcile_with_ceiling(rca, ceiling)
+    if reconciled.confidence_score != rca.confidence_score:
+        logger.info(
+            "[rca_report.agent] confidence %.2f capped to deterministic ceiling %.2f",
+            rca.confidence_score,
+            reconciled.confidence_score,
+        )
+    logger.info(
+        "[rca_report.agent] RCA generated confidence=%.2f",
+        reconciled.confidence_score,
+    )
+    return reconciled
 
 
 def _reconcile_with_ceiling(rca: RootCauseAnalysis, ceiling: float) -> RootCauseAnalysis:

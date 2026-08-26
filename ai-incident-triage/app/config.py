@@ -43,6 +43,7 @@ class Settings(BaseSettings):
     llm_temperature: float = 0.2
     llm_max_tokens: int = 2048
     llm_timeout: int = 60
+    llm_max_retries: int = 3
 
     # Local embedding model + FAISS vector store (mirrors the rag-qna-bot-poc
     # stack: sentence-transformers/all-MiniLM-L6-v2, embedded, no API key).
@@ -53,7 +54,7 @@ class Settings(BaseSettings):
     # still works without email configured; the adapter raises when it is set
     # to send without a key.
     resend_api_key: str | None = None
-    resend_from_email: str = "alerts@yourdomain.com"
+    resend_from_email: str = "ayushofficeworkprofile@gmail.com"
     resend_from_name: str = "Incident Triage Bot"
 
     def active_llm_config(self) -> dict:
