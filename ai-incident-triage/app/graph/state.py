@@ -88,3 +88,8 @@ class IncidentState(TypedDict, total=False):
 
     # 9. Notification
     notification_status: NotificationStatus
+
+    # 10. Runbook Learning
+    runbook_learning_attempted: bool
+    runbook_learning_file_touched: str
+    runbook_learning_similarity_score: float

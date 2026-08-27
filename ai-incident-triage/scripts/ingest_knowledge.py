@@ -12,9 +12,7 @@ from __future__ import annotations
 
 import argparse
 
-from app.knowledge.chunker import chunk_markdown_by_sections
-from app.knowledge.loader import load_markdown_file
-from app.knowledge.vector_store import add_documents
+from app.knowledge.ingest import ingest_file_into_collection
 
 
 def main() -> None:
@@ -23,22 +21,11 @@ def main() -> None:
     parser.add_argument("--collection", required=True, help="Vector-store collection name for this domain.")
     args = parser.parse_args()
 
-    text = load_markdown_file(args.file)
-    chunks = chunk_markdown_by_sections(text, source_file=args.file)
-
-    if not chunks:
+    count = ingest_file_into_collection(args.file, args.collection)
+    if count == 0:
         print(f"No '## ' sections found in {args.file} — nothing to ingest.")
-        return
-
-    add_documents(
-        collection_name=args.collection,
-        docs=[chunk.text for chunk in chunks],
-        metadatas=[chunk.metadata for chunk in chunks],
-        ids=[chunk.chunk_id for chunk in chunks],
-    )
-    print(
-        f"Ingested {len(chunks)} chunks from {args.file} into collection '{args.collection}'."
-    )
+    else:
+        print(f"Ingested {count} chunks from {args.file} into collection '{args.collection}'.")
 
 
 if __name__ == "__main__":
