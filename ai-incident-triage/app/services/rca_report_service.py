@@ -19,6 +19,8 @@ real LLM-backed RCA agent with no change to the graph itself.
 """
 from __future__ import annotations
 
+import json
+import logging
 from datetime import UTC, datetime
 from typing import Any
 
@@ -31,6 +33,9 @@ from app.domain.models.incident import Incident
 from app.domain.models.report import IncidentReport, RunbookReference
 from app.domain.models.root_cause import RootCauseAnalysis
 from app.domain.models.verification import VerificationResult
+from app.guardrails.validator import validate_step_output
+
+logger = logging.getLogger(__name__)
 
 _LABEL_PREFIX = {
     HypothesisLabel.LIKELY: "Likely cause",
@@ -241,6 +246,28 @@ def rca_report_service(state: dict[str, Any], deps: dict[str, Any]) -> dict[str,
     root_cause = generate_root_cause_analysis(
         incident, classification, evidence, hypotheses, model=deps.get("rca_model")
     )
+
+    guardrail_findings = list(state.get("guardrail_findings", []))
+    citation_result = validate_step_output(
+        "rca_report",
+        content=json.dumps(sorted(_cited_evidence_ids(root_cause))),
+        metadata={"valid_ids": sorted(e.evidence_id for e in evidence_items)},
+    )
+    if not citation_result.passed:
+        logger.warning(
+            "[rca_report_service] citation-existence guardrail flagged incident=%s findings=%s",
+            state.get("incident_id"),
+            citation_result.findings,
+        )
+        guardrail_findings.append(
+            {
+                "node": citation_result.node_name,
+                "check": "validate_step_output",
+                "passed": citation_result.passed,
+                "findings": citation_result.findings,
+            }
+        )
+
     report = build_incident_report(
         incident_id=state.get("incident_id") or incident.incident_id,
         classification=classification,
@@ -258,4 +285,17 @@ def rca_report_service(state: dict[str, Any], deps: dict[str, Any]) -> dict[str,
         "rca_confidence": root_cause.confidence_score,
         "incident_report": report,
         "expected_outcome": expected_outcome,
+        "guardrail_findings": guardrail_findings,
     }
+
+
+def _cited_evidence_ids(root_cause: RootCauseAnalysis) -> set[str]:
+    """Every evidence id the RCA report claims to cite -- the citation-
+    existence guardrail verifies each of these actually exists in this run's
+    evidence collection (catches hallucinated citations).
+    """
+    ids: set[str] = set()
+    for hypothesis in [root_cause.primary_cause, *root_cause.contributing_factors]:
+        ids.update(hypothesis.supporting_evidence)
+        ids.update(hypothesis.contradicting_evidence)
+    return ids

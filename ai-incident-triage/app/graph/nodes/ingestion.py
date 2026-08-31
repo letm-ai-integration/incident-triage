@@ -18,6 +18,8 @@ from app.domain.enums.status import IncidentStatus
 from app.domain.models.incident import Incident
 from app.graph.builder import get_deps
 from app.graph.state import IncidentState
+from app.guardrails.pii_guard import check_pii
+from app.guardrails.prompt_injection import check_prompt_injection
 
 
 def ingestion_node(state: IncidentState, config: Optional[RunnableConfig] = None) -> dict:
@@ -29,7 +31,43 @@ def ingestion_node(state: IncidentState, config: Optional[RunnableConfig] = None
     except Exception as exc:
         update = {"errors": state.get("errors", []) + [f"ingestion failed: {exc}"]}
     update.setdefault("current_step", "ingestion")
+
+    incident = update.get("incident")
+    if incident is not None:
+        findings = _run_input_guardrails(incident)
+        if findings:
+            update["guardrail_findings"] = state.get("guardrail_findings", []) + findings
+
     return update
+
+
+def _run_input_guardrails(incident: Incident) -> list[dict]:
+    """Prompt-injection + PII checks on the raw incident (HLD §14.1, §31 --
+    defense-in-depth alongside the "untrusted data" framing in every agent
+    prompt; does not block ingestion).
+    """
+    text = "\n".join(
+        [
+            incident.title,
+            incident.description,
+            *incident.raw_logs,
+            str(incident.raw_events),
+            str(incident.raw_alerts),
+        ]
+    )
+    findings: list[dict] = []
+    for check in (check_prompt_injection, check_pii):
+        result = check("ingestion", text)
+        if not result.passed:
+            findings.append(
+                {
+                    "node": result.node_name,
+                    "check": check.__name__,
+                    "passed": result.passed,
+                    "findings": result.findings,
+                }
+            )
+    return findings
 
 
 def _default_ingest(state: IncidentState, deps: dict) -> dict:

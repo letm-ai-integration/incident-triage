@@ -165,6 +165,29 @@ def create_llm(
     )
 
 
+def get_groq_guard_chat_model() -> ChatOpenAI | None:
+    """Chat model for the Llama Guard content-safety check, independent of
+    the active ``LLM_PROVIDER``.
+
+    Returns ``None`` when ``GROQ_API_KEY`` isn't set so callers (the content-
+    safety guardrail) can fall back to a keyword check instead -- same
+    optional-dependency pattern as every other LLM-backed fallback in this
+    codebase.
+    """
+    settings = get_settings()
+    if not settings.groq_api_key:
+        return None
+    return ChatOpenAI(
+        model=settings.groq_guard_model,
+        api_key=SecretStr(settings.groq_api_key),
+        base_url=settings.groq_base_url,
+        temperature=0,
+        max_tokens=32,
+        timeout=settings.llm_timeout,
+        max_retries=settings.llm_max_retries,
+    )
+
+
 def bind_tools(llm: LLM, tools: list[dict]) -> Callable[[list[dict]], Any]:
     """Return a callable that always invokes the LLM with the given tool schema bound."""
 
@@ -252,4 +275,5 @@ __all__ = [
     "get_async_client",
     "get_chat_model",
     "get_client",
+    "get_groq_guard_chat_model",
 ]

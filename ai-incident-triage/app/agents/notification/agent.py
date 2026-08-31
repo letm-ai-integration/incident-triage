@@ -18,6 +18,8 @@ from app.agents.notification.parser import (
 )
 from app.agents.notification.prompt import SYSTEM_PROMPT, build_user_prompt
 from app.domain.models.report import IncidentReport
+from app.guardrails.safety_guard import check_content_safety
+from app.guardrails.sanitize import sanitize_html_email_body
 from app.llm.client import create_structured_agent
 from app.tools.adapters.resend_email import EmailSendError, send_email
 from app.tools.mock.oncall import get_current_oncall
@@ -100,6 +102,20 @@ def run_notification_agent(
         )
         email = _draft_email_template(rca_report)
         logger.info("[notification.agent] email drafted via template subject=%r", email.subject)
+
+    sanitized_body = sanitize_html_email_body(email.body)
+    safety_result = check_content_safety("notification", sanitized_body)
+    if not safety_result.passed:
+        logger.error(
+            "[notification.agent] content-safety guardrail blocked email incident=%s findings=%s",
+            rca_report.incident_id,
+            safety_result.findings,
+        )
+        return NotificationResult(
+            success=False,
+            error=f"blocked by content-safety guardrail: {safety_result.findings}",
+        )
+    email = NotificationEmail(subject=email.subject, body=sanitized_body)
 
     try:
         message_id = send_email(to=contact.email, subject=email.subject, html_body=email.body)

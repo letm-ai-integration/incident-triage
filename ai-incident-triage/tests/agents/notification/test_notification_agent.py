@@ -162,6 +162,33 @@ def test_missing_oncall_data_returns_error_result(monkeypatch):
     assert "not found" in (result.error or "")
 
 
+def test_content_safety_guardrail_blocks_send(monkeypatch):
+    monkeypatch.setattr(agent_module, "get_current_oncall", lambda: _oncall())
+    monkeypatch.setattr(
+        agent_module,
+        "create_structured_agent",
+        lambda **kwargs: _FakeAgent(NotificationEmail(subject="s", body="<p>b</p>")),
+    )
+    send_calls = []
+    monkeypatch.setattr(agent_module, "send_email", lambda **kwargs: send_calls.append(kwargs))
+
+    from app.guardrails.models import GuardrailResult
+
+    monkeypatch.setattr(
+        agent_module,
+        "check_content_safety",
+        lambda node_name, content: GuardrailResult(
+            node_name=node_name, passed=False, findings=["safety: matched keyword 'x'"]
+        ),
+    )
+
+    result = run_notification_agent(_report())
+
+    assert result.success is False
+    assert "content-safety guardrail" in result.error
+    assert send_calls == []
+
+
 def test_parser_raises_on_missing_structured_response():
     with pytest.raises(TypeError, match="structured_response"):
         parse_notification_response({"messages": []})
