@@ -22,6 +22,7 @@ from app.domain.models.hypothesis import Hypothesis
 from app.domain.models.incident import Incident
 from app.domain.models.root_cause import RootCauseAnalysis
 from app.llm.client import create_structured_agent
+from app.logging_utils import agent_entry, agent_output, agent_exit, agent_error
 from app.rules.confidence import compute_confidence_ceiling
 
 logger = logging.getLogger(__name__)
@@ -41,6 +42,7 @@ def generate_root_cause_analysis(
     job is to weigh them against each other and the evidence, not originate
     them from nothing.
     """
+    agent_entry("RCAReportAgent", f"incident={incident.incident_id} hypotheses={len(hypotheses)}")
     ceiling = compute_confidence_ceiling(hypotheses)
     logger.info(
         "[rca_report.agent] generating RCA incident=%s evidence_count=%d hypotheses=%d ceiling=%.2f",
@@ -66,6 +68,7 @@ def generate_root_cause_analysis(
             }
         )
     except Exception:
+        agent_error("RCAReportAgent", Exception("LLM invocation failed"), f"incident={incident.incident_id}")
         logger.exception(
             "[rca_report.agent] LLM invocation failed -- check provider base_url "
             "reachability, API key, and network/proxy settings"
@@ -79,6 +82,11 @@ def generate_root_cause_analysis(
             rca.confidence_score,
             reconciled.confidence_score,
         )
+    agent_output(
+        "RCAReportAgent",
+        f"confidence={reconciled.confidence_score:.2f} cause={reconciled.primary_cause.description[:80]}",
+    )
+    agent_exit("RCAReportAgent")
     logger.info(
         "[rca_report.agent] RCA generated confidence=%.2f",
         reconciled.confidence_score,

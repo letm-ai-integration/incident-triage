@@ -17,11 +17,14 @@ from typing import Any
 from app.agents.investigation.orchestrator import investigate
 from app.domain.enums.status import IncidentStatus
 from app.llm.client import LLMConfigurationError, get_chat_model
+from app.logging_utils import agent_entry, agent_output, agent_exit, agent_error
 
 
 def investigation_service(state: dict[str, Any], deps: dict[str, Any]) -> dict[str, Any]:
     incident = state["incident"]
     classification = state.get("classification")
+
+    agent_entry("InvestigationService", f"incident={incident.incident_id}")
 
     llm = None
     if deps.get("use_llm"):
@@ -30,7 +33,18 @@ def investigation_service(state: dict[str, Any], deps: dict[str, Any]) -> dict[s
         except LLMConfigurationError:
             llm = None  # fall back to deterministic sub-agent analysis
 
-    outcome = investigate(incident, classification, llm=llm)
+    try:
+        outcome = investigate(incident, classification, llm=llm)
+        agent_output(
+            "InvestigationService",
+            f"confidence={outcome.confidence:.2f} evidence={len(outcome.evidence)}",
+        )
+    except Exception as exc:
+        agent_error("InvestigationService", exc)
+        raise
+    finally:
+        agent_exit("InvestigationService")
+
     retry_count = state.get("retry_count", 0) + (1 if "retry_count" in state else 0)
     return {
         "evidence": outcome.evidence,
@@ -38,6 +52,8 @@ def investigation_service(state: dict[str, Any], deps: dict[str, Any]) -> dict[s
         "log_analysis": outcome.log_analysis,
         "runbook_analysis": outcome.runbook_analysis,
         "kubernetes_analysis": outcome.kubernetes_analysis,
+        "runbook_name": outcome.runbook_name,
+        "runbook_solution": outcome.runbook_solution,
         "investigation_status": IncidentStatus.INVESTIGATING,
         "retry_count": retry_count,
     }

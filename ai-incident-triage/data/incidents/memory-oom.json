@@ -1,0 +1,43 @@
+{
+  "incident_id": "INC-010",
+  "title": "Memory pressure and OOM on session-cache",
+  "description": "session-cache heap climbs for 20 minutes until the cart-service container is OOMKilled. GC pauses spike and memory_pct reaches the container limit under steady request load.",
+  "source": "mock",
+  "service": "cart-service",
+  "environment": "PRODUCTION",
+  "priority_hint": "P1",
+  "tags": ["memory", "oom", "cart", "heap", "leak"],
+  "timestamp": "2026-08-06T10:24:00.000Z",
+  "raw_logs": [
+    "ERROR com.ecommerce.cart.SessionCache - java.lang.OutOfMemoryError: Java heap space",
+    "WARN gc_pause_ms=1800 heap=99.8%",
+    "ERROR OOMKilled exit code 137 pod cart-service-6d7f4b"
+  ],
+  "raw_events": [
+    {
+      "type": "deployment",
+      "service": "cart-service",
+      "timestamp": "2026-08-06T08:00:00.000Z",
+      "description": "Last cart-service release v1.9.3 completed ~2h before symptom onset"
+    }
+  ],
+  "raw_alerts": [
+    {
+      "alert_name": "MemoryHigh",
+      "severity": "critical",
+      "fired_at": "2026-08-06T10:23:00.000Z",
+      "labels": {"service": "cart-service", "namespace": "prod"}
+    }
+  ],
+  "raw_metrics": {
+    "memory_pct": 99.8,
+    "gc_pause_ms": 1800,
+    "pod_restarts": 2
+  },
+  "metadata": {
+    "scenario_id": "INC-010",
+    "service": "cart-service",
+    "namespace": "prod",
+    "data_sources": ["metrics", "logs_traces", "k8s_logs"]
+  }
+}

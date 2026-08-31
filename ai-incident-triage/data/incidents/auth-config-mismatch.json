@@ -1,0 +1,42 @@
+{
+  "incident_id": "INC-012",
+  "title": "Authentication configuration mismatch on auth-service",
+  "description": "After the auth-service rollout, JWT-signing key lookups fail because the new deployment references a renamed secret volume mount. All token verification requests fail and logins are blocked.",
+  "source": "mock",
+  "service": "auth-service",
+  "environment": "PRODUCTION",
+  "priority_hint": "P1",
+  "tags": ["authentication", "config", "auth-service", "jwt", "secret"],
+  "timestamp": "2026-08-24T06:31:00.000Z",
+  "raw_logs": [
+    "ERROR [auth-service] failed to read signing key: no such file /etc/auth/keys/jwt.pem",
+    "ERROR [auth-service] JWT verification failed: KeyRetrievalException",
+    "DEBUG [auth-service] ConfigMap mounted at /etc/auth/keys"
+  ],
+  "raw_events": [
+    {
+      "type": "deployment",
+      "service": "auth-service",
+      "timestamp": "2026-08-24T06:28:00.000Z",
+      "description": "Deployed auth-service v5.2.0 with updated ConfigMap referencing a renamed secret volume mount"
+    }
+  ],
+  "raw_alerts": [
+    {
+      "alert_name": "LoginFailureRateCritical",
+      "severity": "critical",
+      "fired_at": "2026-08-24T06:31:00.000Z",
+      "labels": {"service": "auth-service", "namespace": "auth"}
+    }
+  ],
+  "raw_metrics": {
+    "login_error_rate_pct": 100,
+    "pods_ready": 0
+  },
+  "metadata": {
+    "scenario_id": "INC-012",
+    "service": "auth-service",
+    "namespace": "auth",
+    "data_sources": ["k8s_logs", "metrics"]
+  }
+}

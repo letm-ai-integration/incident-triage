@@ -246,6 +246,13 @@ def rca_report_service(state: dict[str, Any], deps: dict[str, Any]) -> dict[str,
     root_cause = generate_root_cause_analysis(
         incident, classification, evidence, hypotheses, model=deps.get("rca_model")
     )
+    runbook_name = state.get("runbook_name")
+    runbook_solution = state.get("runbook_solution")
+    runbook_references: list[RunbookReference] = []
+    if runbook_name and runbook_solution:
+        runbook_references = [
+            RunbookReference(runbook_id=runbook_name, title=runbook_name, url=f"runbooks/{runbook_name}")
+        ]
 
     guardrail_findings = list(state.get("guardrail_findings", []))
     citation_result = validate_step_output(
@@ -275,11 +282,21 @@ def rca_report_service(state: dict[str, Any], deps: dict[str, Any]) -> dict[str,
         hypotheses=hypotheses,
         root_cause=root_cause,
         verification=VerificationResult(is_resolved=False, needs_reinvestigation=True),
+        runbook_references=runbook_references,
     )
-    expected_outcome = {
-        "expectation": f"Incident resolved by addressing '{root_cause.primary_cause.description}'.",
-        "action": f"Apply the recommended fix for '{root_cause.primary_cause.description}' and confirm recovery.",
-    }
+    if runbook_name and runbook_solution:
+        expected_outcome = {
+            "expectation": f"Incident resolved by addressing '{runbook_name}'.",
+            "action": (
+                f"A matching runbook was found for \"{runbook_name}\". "
+                f"The recommended resolution from the runbook is: {runbook_solution}"
+            ),
+        }
+    else:
+        expected_outcome = {
+            "expectation": f"Incident resolved by addressing '{root_cause.primary_cause.description}'.",
+            "action": f"Apply the recommended fix for '{root_cause.primary_cause.description}' and confirm recovery.",
+        }
     return {
         "root_cause": root_cause,
         "rca_confidence": root_cause.confidence_score,

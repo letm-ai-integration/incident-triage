@@ -1,0 +1,36 @@
+{
+  "incident_id": "INC-013",
+  "title": "Dependency cache service down (redis-cache)",
+  "description": "The shared redis-cache service is unreachable, causing a downstream dependency failure for order and cart services that rely on it. Cache-miss storms amplify latency and error rates on dependent endpoints.",
+  "source": "mock",
+  "service": "redis-cache",
+  "environment": "PRODUCTION",
+  "priority_hint": "P1",
+  "tags": ["dependency", "cache", "redis", "service", "failure"],
+  "timestamp": "2026-08-06T11:10:00.000Z",
+  "raw_logs": [
+    "ERROR [order-service] RedisConnectionException: connection refused to redis-cache:6379",
+    "ERROR [cart-service] cache read timeout after 5000ms from redis-cache",
+    "WARN [order-service] circuit breaker OPEN for redis-cache"
+  ],
+  "raw_events": [],
+  "raw_alerts": [
+    {
+      "alert_name": "DependencyDown",
+      "severity": "critical",
+      "fired_at": "2026-08-06T11:10:00.000Z",
+      "labels": {"service": "redis-cache", "namespace": "platform"}
+    }
+  ],
+  "raw_metrics": {
+    "dependency_error_rate_pct": 100,
+    "cache_hit_rate_pct": 0.0,
+    "order_p95_latency_ms": 6100
+  },
+  "metadata": {
+    "scenario_id": "INC-013",
+    "service": "redis-cache",
+    "namespace": "platform",
+    "data_sources": ["logs_traces", "metrics"]
+  }
+}

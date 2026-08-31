@@ -1,0 +1,49 @@
+{
+  "incident_id": "INC-009",
+  "title": "High CPU Saturation on checkout-service",
+  "description": "checkout-service CPU usage is pinned at 100% while request traffic stays flat, degrading throughput and latency. A newly released hot-path change is suspected of pegging CPU.",
+  "source": "mock",
+  "service": "checkout-service",
+  "environment": "PRODUCTION",
+  "priority_hint": "P2",
+  "tags": [
+    "cpu",
+    "saturation",
+    "checkout",
+    "performance"
+  ],
+  "timestamp": "2026-08-06T09:58:00.000Z",
+  "raw_logs": [
+    "WARN cpu_pct=99.6% for checkout-service replicas",
+    "INFO [checkout-service] handling 180 rps at 100% cpu",
+    "ERROR gateway p99=3200ms latency due to cpu saturation"
+  ],
+  "raw_events": [
+    {
+      "type": "deployment",
+      "service": "checkout-service",
+      "timestamp": "2026-08-06T08:55:00.000Z",
+      "description": "Rolled out checkout-service v2.3.0 with a rewrite of the discount calculation hot path"
+    }
+  ],
+  "raw_alerts": [
+    {
+      "alert_name": "HighCpuUtilization",
+      "severity": "warning",
+      "fired_at": "2026-08-06T09:57:00.000Z",
+      "labels": {"service": "checkout-service", "namespace": "prod"}
+    }
+  ],
+  "raw_metrics": {
+    "cpu_usage_pct": 99.0,
+    "requests_per_sec": 182.0,
+    "p95_latency_ms": 2100
+  },
+  "metadata": {
+    "scenario_id": "INC-009",
+    "service": "checkout-service",
+    "namespace": "prod",
+    "data_sources": ["metrics", "logs_traces"],
+    "runbook": "High CPU Saturation"
+  }
+}

@@ -159,10 +159,12 @@ def test_route_after_verification_reinvestigates_then_completes():
 
 
 def test_unresolved_incident_loops_then_terminates_unresolved():
-    """ImagePullBackOff sample has no corroborating telemetry -> verification
-    fails -> reinvestigation loop bounded by MAX_INVESTIGATION_RETRIES ->
+    """The synthetic unmatched incident has zero corroborating telemetry in
+    model-data (deliberately unsynchronized service 'graviton-scheduler'), so
+    retrieval stays irrelevant -> confidence below the resolution threshold ->
+    verification fails -> reinvestigation loop bounded by MAX_INVESTIGATION_RETRIES
     terminates at notification with an unresolved outcome."""
-    result = _run(_load("imagepullbackoff.json"))
+    result = _run(_load("unmatched-no-telemetry.json"))
     assert result["is_resolved"] is False
     assert result["investigation_status"] == IncidentStatus.UNRESOLVED
     assert result["retry_count"] > 0  # loop actually ran

@@ -10,7 +10,7 @@
   {
     "id": "knowledge_base/runbooks/runbook.md::1::Pod CrashLoopBackOff (OOMKilled)",
     "text": "## Pod CrashLoopBackOff (OOMKilled)\n\n**Alert:** Pod restart count > 5 within 10 minutes, termination reason\nOOMKilled\n**Severity:** High\n**Routing:** platformOnCall\n\n**Impact:**\n- Reduced service capacity\n- Potential request failures during restart windows\n\n**RCA Path:**\n1. `kubectl describe pod <pod>` — confirm OOMKilled as termination reason.\n2. Check memory usage trend over last 24h — gradual climb (leak) vs.\n   sudden spike (traffic burst).\n3. Cross-reference recent deployments.\n\n**Solution:**\n- Roll back to last known-good image if deployment-correlated.\n- If gradual leak: raise memory limit as temporary mitigation, file a\n  follow-up ticket for the leak itself.\n\n---",
-    "metadata": { 
+    "metadata": {
       "source_file": "knowledge_base/runbooks/runbook.md",
       "title": "Pod CrashLoopBackOff (OOMKilled)"
     }
@@ -33,10 +33,122 @@
   },
   {
     "id": "knowledge_base/runbooks/runbook.md::4::Database Connection Pool Exhausted",
-    "text": "## Database Connection Pool Exhausted\n\n**Alert:** Database connection pool at 100% utilization, connection\nacquisition timeouts\n**Severity:** Critical\n**Routing:** prodCritical / databaseOnCall\n\n**Impact:**\n- Application threads block waiting for connections\n- Spikes in request latency and 5xx errors\n- Cascading service degradation as more services contend for connections\n\n**RCA Path:**\n1. Check connection-pool metrics (active/idle/waiting) on the affected\n   service.\n2. Look for connection leaks — unclosed connections in long-running\n   requests are a common cause.\n3. Correlate with any recent deployment or traffic spike.\n4. Check DB server limits and per-user max connections.\n\n**Solution:**\n- Restart/scale the affected application to release leaked connections.\n- If traffic burst: raise the pool max size if the database can sustain it.\n- If leaked connections persist: roll back the release that introduced the\n   leak and file a follow-up bug.\n- If DB server-level limit: tune max_connections and review per-service\n  allowances.",
+    "text": "## Database Connection Pool Exhausted\n\n**Alert:** Database connection pool at 100% utilization, connection\nacquisition timeouts\n**Severity:** Critical\n**Routing:** prodCritical / databaseOnCall\n\n**Impact:**\n- Application threads block waiting for connections\n- Spikes in request latency and 5xx errors\n- Cascading service degradation as more services contend for connections\n\n**RCA Path:**\n1. Check connection-pool metrics (active/idle/waiting) on the affected\n   service.\n2. Look for connection leaks — unclosed connections in long-running\n   requests are a common cause.\n3. Correlate with any recent deployment or traffic spike.\n4. Check DB server limits and per-user max connections.\n\n**Solution:**\n- Restart/scale the affected application to release leaked connections.\n- If traffic burst: raise the pool max size if the database can sustain it.\n- If leaked connections persist: roll back the release that introduced the\n   leak and file a follow-up bug.\n- If DB server-level limit: tune max_connections and review per-service\n  allowances.\n\n---",
     "metadata": {
       "source_file": "knowledge_base/runbooks/runbook.md",
       "title": "Database Connection Pool Exhausted"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/runbook.md::5::Third-Party API Timeout",
+    "text": "## Third-Party API Timeout\n\n**Alert:** External dependency error rate > 20% or egress p95 latency > 5s\nsustained for 5 minutes\n**Severity:** High\n**Routing:** prodCritical\n\n**Impact:**\n- Customer-facing transactions that depend on the third party fail or stall\n- Retry storms amplify latency onto adjacent services\n\n**RCA Path:**\n1. Check outbound-call logs for the failing provider — distinguish timeouts\n   vs. HTTP 5xx from the provider.\n2. Confirm the provider status page / feed reports degradation.\n3. Review circuit-breaker state transitions (OPEN/HALF_OPEN/CLOSED) for the\n   dependency.\n4. Verify no correlated local deployment — absence keeps blame external.\n\n**Solution:**\n- Keep the circuit breaker OPEN and serve fallback/queued processing until\n  the provider recovers; escalate to the vendor if prolonged.\n- After recovery, drain any deferred-work queues and reconcile in-flight\n  transactions.\n\n---",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/runbook.md",
+      "title": "Third-Party API Timeout"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/runbook.md::6::Deployment Regression",
+    "text": "## Deployment Regression\n\n**Alert:** New error class appearing within 15 minutes of a deployment, or\nerror rate jumping > 5x baseline post-rollout\n**Severity:** Critical\n**Routing:** prodCritical\n\n**Impact:**\n- Immediate user-facing errors on affected endpoints\n- Possible readiness-probe failures reducing serving capacity\n\n**RCA Path:**\n1. Compare deployment events with first occurrence of the new error type.\n2. Confirm the error class was absent before the rollout window.\n3. Check metrics for the post-deploy error-rate step change.\n4. Roll forward only if the fix is trivial; otherwise roll back.\n\n**Solution:**\n- Roll back to the previous known-good version immediately.\n- File a follow-up bug with the stack traces captured during the window;\n  re-release only after reproducing and fixing the failure.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/runbook.md",
+      "title": "Deployment Regression"
+    }
+  },
+  {
+    "id": "runbooks/database-connection-failure.md::0::Overview",
+    "text": "## Overview\n\nThe application cannot reach or acquire a connection from the primary database,\nusually surfacing as `Connection refused`, `connection pool exhausted`, or\n`SQLTransientConnectionException`. Root causes are typically one of: DB server\ndown/restarting, network partition to the DB, a saturated connection pool (with\nor without a connection leak), or max-connection exhaustion at the server.",
+    "metadata": {
+      "source_file": "runbooks/database-connection-failure.md",
+      "title": "Overview"
+    }
+  },
+  {
+    "id": "runbooks/database-connection-failure.md::1::Solution",
+    "text": "## Solution\n\n1. Verify DB server health and connectivity from the affected pod:\n   `kubectl exec <pod> -- nc -vz <db-host> <port>` and check the DB server logs.\n2. Inspect pool metrics (active/idle/waiting/utilization). If utilization is\n   pinned at 100% while request traffic is flat, suspect a **connection leak**:\n   rolling-restart the application to reclaim leaked connections, then fix the\n   unclosed-connection code path (file a follow-up bug).\n3. If due to a traffic burst, raise the pool `maximumPoolSize` if the database\n   can sustain it.\n4. Check DB server `max_connections` and per-service allowances; raise them and\n   review quotas if threads are blocked.\n5. Confirm recovery: pool waiters drain, success rate returns to baseline, and\n   no new timeouts for at least 15 minutes.",
+    "metadata": {
+      "source_file": "runbooks/database-connection-failure.md",
+      "title": "Solution"
+    }
+  },
+  {
+    "id": "runbooks/database-connection-failure.md::2::Troubleshooting",
+    "text": "## Troubleshooting\n\n- `pool utilization=100%` + `waiting` climbing + `slow_query_log: 0` → leak, not\n  slow queries.\n- `connection acquisition wait time p95 approaching timeout` → the pool is\n  saturated right now; restart/scale first, then investigate the leak.\n- DB-side FATAL \"remaining connection slots are reserved\" → server-level\n  `max_connections` hit; raise limits or reduce client pool sizes.",
+    "metadata": {
+      "source_file": "runbooks/database-connection-failure.md",
+      "title": "Troubleshooting"
+    }
+  },
+  {
+    "id": "runbooks/high-api-latency.md::0::Overview",
+    "text": "## Overview\n\nAPI response latency (p95/p99) spikes well above baseline, often accompanied by\nHTTP 503/unavailable responses and elevated error rates. Typical triggers:\nupstream dependency (DB, cache, third-party API) slowdown, JVM heap/gc\npressure, CPU saturation, or a traffic spike overwhelming capacity.",
+    "metadata": {
+      "source_file": "runbooks/high-api-latency.md",
+      "title": "Overview"
+    }
+  },
+  {
+    "id": "runbooks/high-api-latency.md::1::Solution",
+    "text": "## Solution\n\n1. Identify the slow endpoints and confirm the latency step-change in metrics\n   (`p95`, `p99`, `gc_pause_ms`, `cpu_pct`).\n2. Check upstream dependency health first — DB connection pool, cache, and any\n   external provider. A slow upstream manifests as latency on the caller.\n3. Check JVM/resources: high heap usage + long GC pauses point to memory\n   pressure; high CPU → scale out or optimise.\n4. Correlate with a recent deployment or traffic spike; roll back a bad release\n   or scale the deployment for a burst.\n5. Confirm recovery: latency returns to baseline p95/p99 for a sustained\n   window, 5xx/unavailable rate drops, and SLO burn stops.",
+    "metadata": {
+      "source_file": "runbooks/high-api-latency.md",
+      "title": "Solution"
+    }
+  },
+  {
+    "id": "runbooks/high-api-latency.md::2::Troubleshooting",
+    "text": "## Troubleshooting\n\n- `503` + `readiness probe failed` + high heap → probe/health gating; fix probe\n  or the dependency it checks.\n- High `gc_pause_ms` + high heap → memory leak or undersized heap; raise limit /\n  fix leak.\n- Latency + high upstream p95 → external dependency; check the provider and\n  circuit breaker instead of local scaling.",
+    "metadata": {
+      "source_file": "runbooks/high-api-latency.md",
+      "title": "Troubleshooting"
+    }
+  },
+  {
+    "id": "runbooks/high-cpu-saturation.md::0::Overview",
+    "text": "## Overview\n\nA workload's CPU usage pins near its limit, degrading throughput and increasing\nlatency. Causes: an inefficient hot path, a tight loop / busy-wait leak, an\nabnormally high request burst, or too few replicas for the load. Characterised\nby `cpu_pct` flatlining near 100% while `requests_per_sec` stays flat or rises.",
+    "metadata": {
+      "source_file": "runbooks/high-cpu-saturation.md",
+      "title": "Overview"
+    }
+  },
+  {
+    "id": "runbooks/high-cpu-saturation.md::1::Solution",
+    "text": "## Solution\n\n1. Confirm `cpu_pct` is pinned and identify the workload/pods pegging CPU.\n2. Check `requests_per_sec` vs `cpu_pct`: flat load + high CPU points to a code\n   regression (hot path / busy loop) — roll back if deployment-correlated.\n3. If load genuinely spiked, scale the deployment (more replicas) and/or raise\n   CPU request/limits if the node can sustain it.\n4. Capture a CPU profile (e.g. jstack/async-profiler) on a burning pod to find\n   the hot method; fix and re-release.\n5. Confirm recovery: CPU utilisation returns under a healthy threshold and\n   latency/SLO recovers.",
+    "metadata": {
+      "source_file": "runbooks/high-cpu-saturation.md",
+      "title": "Solution"
+    }
+  },
+  {
+    "id": "runbooks/high-cpu-saturation.md::2::Troubleshooting",
+    "text": "## Troubleshooting\n\n- `cpu_pct` ~100% with flat traffic → code/regression, not capacity.\n- `cpu_pct` ~100% with rising traffic → capacity; scale out.\n- High CPU + high latency together → saturating CPU starving the request path.",
+    "metadata": {
+      "source_file": "runbooks/high-cpu-saturation.md",
+      "title": "Troubleshooting"
+    }
+  },
+  {
+    "id": "runbooks/pod-crash-loop.md::0::Overview",
+    "text": "## Overview\n\nA workload's pods start, crash, and restart repeatedly (`CrashLoopBackOff`),\noften with a `Back-off restarting failed container` event. Common causes:\napplication misconfiguration (missing env vars/config, e.g. a renamed secret\nmount), the process being OOMKilled when it exceeds its memory limit, DB\nconnection failures on startup, or an uncaught exception during init.",
+    "metadata": {
+      "source_file": "runbooks/pod-crash-loop.md",
+      "title": "Overview"
+    }
+  },
+  {
+    "id": "runbooks/pod-crash-loop.md::1::Solution",
+    "text": "## Solution\n\n1. `kubectl logs <pod> --previous` to read the crashed container's last output.\n2. `kubectl describe pod <pod>` and check the last `State`/`Reason` — confirm if\n   the termination reason is `OOMKilled` (exit 137) or an application error.\n3. If `OOMKilled`: check the memory trend (gradual climb = leak, sudden spike =\n   traffic burst). Roll back to the last known-good image if deployment\n   correlated; otherwise raise the memory limit as temporary mitigation and\n   file a follow-up for the leak.\n4. If config-related (missing secret/env): fix the ConfigMap/Secret reference and\n   re-roll. For auth pods a renamed secret volume mount is a common trigger.\n5. Confirm recovery: `ready` replicas return to `desired`, restart count\n   stabilises, and error rate drops to baseline.",
+    "metadata": {
+      "source_file": "runbooks/pod-crash-loop.md",
+      "title": "Solution"
+    }
+  },
+  {
+    "id": "runbooks/pod-crash-loop.md::2::Troubleshooting",
+    "text": "## Troubleshooting\n\n- `CrashLoopBackOff` + `OOMKilled` + high restart count → memory pressure.\n- `CrashLoopBackOff` immediately after a config deploy → misconfiguration; check\n  the new ConfigMap/Secret/Helm values.\n- Healthy-look `Restarting` pods with no OOM → check app startup logs for an\n  uncaught init exception.",
+    "metadata": {
+      "source_file": "runbooks/pod-crash-loop.md",
+      "title": "Troubleshooting"
     }
   }
 ]

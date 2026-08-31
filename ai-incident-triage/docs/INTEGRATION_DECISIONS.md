@@ -123,6 +123,62 @@ see `README.md` and `incident-triage-HLD.md`.
   retrieval attempted a Hugging Face round-trip and failed in
   restricted-network environments.
 
+## Investigation subagent execution fix (2026-08-26)
+
+### Root cause
+
+Investigation subagents were not executing. The investigation phase graph
+(`app/agents/investigation/subgraph.py`) used `builder.add_node(name, fn)`
+where `builder` was a raw `StateGraph` instance from `create_graph()`. This
+called `StateGraph.add_node()` directly, bypassing the wrapper in
+`app/graph.builder.add_node()` that adds `[NODE][ENTRY]` / `[NODE][EXIT]`
+logging. Additionally, the builder wrapper was a **sync function** wrapping
+**async node functions** — it returned unawaited coroutines, breaking
+LangGraph's async dispatch. In deterministic mode (no LLM), the orchestrator's
+`_log_evidence` and `_kubernetes_evidence` used inline keyword fallbacks
+instead of delegating to the agents, so `LogAnalysisAgent` and
+`KubernetesAgent` never actually executed.
+
+### Fixes applied
+
+1. **`app/graph/builder.py`**: Rewrote `_wrap_node_with_logging` to preserve
+   async-ness. Async node functions get an `async def` wrapper; sync nodes get
+   a `def` wrapper. Uses `[NODE][ENTRY]` / `[NODE][EXIT]` format via shared
+   `app/logging_utils.py`.
+
+2. **`app/agents/investigation/subgraph.py`**: Changed to import `add_node`
+   and `add_edge` from `app.graph.builder` and call them as free functions
+   (`add_node(builder, name, fn)`) instead of as instance methods
+   (`builder.add_node(name, fn)`). This ensures the logging wrapper is applied.
+
+3. **`app/agents/investigation/log_analysis/agent.py`** and
+   **`app/agents/investigation/kubernetes/agent.py`**: Added
+   `analyze_logs_with_fallback()` / `analyze_kubernetes_with_fallback()` that
+   **always execute** the agent (LLM when available, deterministic keyword
+   fallback internally). Added `[SUBAGENT][ENTRY]` / `[SUBAGENT][OUTPUT]` /
+   `[SUBAGENT][EXIT]` lifecycle logging.
+
+4. **`app/agents/investigation/orchestrator.py`**: Updated `_log_evidence` and
+   `_kubernetes_evidence` to always delegate to the new `*_with_fallback`
+   functions instead of using inline keyword fallbacks. Added `[AGENT]`
+   lifecycle logging to `run_investigation`.
+
+5. **`app/logging_utils.py`**: New shared module providing consistent
+   `[NODE]` / `[AGENT]` / `[SUBAGENT]` lifecycle logging with ENTRY / OUTPUT /
+   EXIT / ERROR tags. Used by all agents, subagents, and the builder wrapper.
+
+### Validation
+
+- All 101 tests pass.
+- CLI trace shows the full lifecycle:
+  `[NODE][ENTRY] investigation` → `[AGENT][ENTRY] InvestigationService` →
+  `[AGENT][ENTRY] InvestigationOrchestrator` → `[SUBAGENT][ENTRY] LogAnalysisAgent`
+  → `[SUBAGENT][EXIT] LogAnalysisAgent` → `[SUBAGENT][ENTRY] KubernetesAnalysisAgent`
+  → `[SUBAGENT][EXIT] KubernetesAnalysisAgent` → `[SUBAGENT][ENTRY] RunbookAgent`
+  → `[SUBAGENT][EXIT] RunbookAgent` → `[AGENT][EXIT] InvestigationOrchestrator`
+  → `[AGENT][EXIT] InvestigationService` → `[NODE][EXIT] investigation`
+- All three subagents execute in both LLM-backed and deterministic modes.
+
 ## Testing & validation
 
 - `tests/graph/test_workflow.py` (15 tests): compilation + node/edge presence,

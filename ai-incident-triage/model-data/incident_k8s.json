@@ -1,0 +1,58 @@
+[
+  {
+    "timestamp": "2026-08-06T11:04:00.000Z",
+    "pod_name": "orders-worker-01",
+    "namespace": "prod",
+    "log_level": "ERROR",
+    "message": "2026-08-06T11:04:00.000Z ERROR [kubelet] Back-off restarting failed container orders-worker"
+  },
+  {
+    "timestamp": "2026-08-06T11:04:30.000Z",
+    "pod_name": "orders-worker-02",
+    "namespace": "prod",
+    "log_level": "ERROR",
+    "message": "2026-08-06T11:04:30.000Z ERROR [orders-worker] CrashLoopBackOff: container restarted 6 times, OOMKilled"
+  },
+  {
+    "timestamp": "2026-08-06T11:05:00.000Z",
+    "pod_name": "orders-worker-03",
+    "namespace": "prod",
+    "log_level": "ERROR",
+    "message": "2026-08-06T11:05:00.000Z ERROR [orders-worker] OOMKilled - process terminated due to out-of-memory, exit 137"
+  },
+  {
+    "timestamp": "2026-08-24T06:31:00.000Z",
+    "pod_name": "auth-service-04",
+    "namespace": "auth",
+    "log_level": "ERROR",
+    "message": "2026-08-24T06:31:00.000Z ERROR [auth-service] CrashLoopBackOff: config mount error, cannot find /etc/auth/keys"
+  },
+  {
+    "timestamp": "2026-08-24T06:31:10.000Z",
+    "pod_name": "auth-service-05",
+    "namespace": "auth",
+    "log_level": "ERROR",
+    "message": "2026-08-24T06:31:10.000Z ERROR [auth-service] failed to mount secret volume /etc/auth/keys, Pod not ready"
+  },
+  {
+    "timestamp": "2026-08-06T10:24:00.000Z",
+    "pod_name": "cart-service-6d7f4b",
+    "namespace": "prod",
+    "log_level": "ERROR",
+    "message": "2026-08-06T10:24:00.000Z ERROR [cart-service] OOMKilled - process terminated due to out-of-memory, exit 137"
+  },
+  {
+    "timestamp": "2026-08-06T11:47:00.000Z",
+    "pod_name": "product-catalog-09",
+    "namespace": "prod",
+    "log_level": "WARN",
+    "message": "2026-08-06T11:47:00.000Z WARN [product-catalog] readiness probe failing, pod not ready, 503 behind gateway"
+  },
+  {
+    "timestamp": "2026-08-06T09:58:00.000Z",
+    "pod_name": "checkout-service-02",
+    "namespace": "prod",
+    "log_level": "WARN",
+    "message": "2026-08-06T09:58:00.000Z WARN [checkout-service] cpu throttle detected, cpu_pct=99.6%"
+  }
+]

@@ -38,6 +38,9 @@ class RunbookResult:
     error: str | None = None
     matched_title: str | None = None
     score: float | None = None
+    runbook_name: str | None = None
+    solution: str | None = None
+    resolution: str | None = None
 
 
 class IncidentState(TypedDict, total=False):
@@ -63,6 +66,10 @@ class IncidentState(TypedDict, total=False):
     log_analysis: Evidence
     runbook_analysis: Evidence
     kubernetes_analysis: Evidence
+
+    # Runbook-backed resolution captured during investigation (null when none)
+    runbook_name: str | None
+    runbook_solution: str | None
 
     # 4. Investigation Summary
     investigation_summary: dict

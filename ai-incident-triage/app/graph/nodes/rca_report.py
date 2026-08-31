@@ -13,7 +13,7 @@ from app.domain.enums.priority import Priority
 from app.domain.models.classification import ClassificationResult
 from app.domain.models.evidence import EvidenceCollection
 from app.domain.models.hypothesis import Hypothesis, HypothesisLabel
-from app.domain.models.report import IncidentReport
+from app.domain.models.report import IncidentReport, RunbookReference
 from app.domain.models.root_cause import RootCauseAnalysis, TimelineEvent
 from app.domain.models.verification import VerificationResult
 from app.graph.builder import get_deps
@@ -57,6 +57,22 @@ def _default_rca_report(state: IncidentState, deps: dict) -> dict:
         "action": f"Apply the recommended fix for '{top.description}' and confirm recovery.",
     }
 
+    runbook_name = state.get("runbook_name")
+    runbook_solution = state.get("runbook_solution")
+    runbook_references: list = []
+    if runbook_name and runbook_solution:
+        runbook_references = [RunbookReference(
+            runbook_id=runbook_name,
+            title=runbook_name,
+            url=f"runbooks/{runbook_name}",
+        )]
+        # Explicitly cite the runbook-backed resolution in the final result.
+        expected_outcome = {
+            "expectation": f"Incident resolved by addressing '{runbook_name}'.",
+            "action": f"A matching runbook was found for \"{runbook_name}\". "
+                      f"The recommended resolution from the runbook is: {runbook_solution}",
+        }
+
     report = IncidentReport(
         incident_id=incident_id,
         classification=classification,
@@ -66,8 +82,8 @@ def _default_rca_report(state: IncidentState, deps: dict) -> dict:
         ),
         hypotheses=hypotheses,
         root_cause=root_cause,
-        recommended_actions=[expected_outcome["action"]],
-        runbook_references=[],
+        recommended_actions=_recommended_actions(expected_outcome, runbook_references),
+        runbook_references=runbook_references,
         verification=VerificationResult(is_resolved=False, needs_reinvestigation=True),
         created_at=datetime.now(timezone.utc),
     )
@@ -78,6 +94,14 @@ def _default_rca_report(state: IncidentState, deps: dict) -> dict:
         "incident_report": report,
         "expected_outcome": expected_outcome,
     }
+
+
+def _recommended_actions(expected_outcome: dict, runbook_references: list) -> list:
+    """Build recommended actions, including the runbook-backed resolution."""
+    actions = [expected_outcome.get("action", "")]
+    for ref in runbook_references:
+        actions.append(f"Follow runbook: {ref.title} ({ref.url})")
+    return [a for a in actions if a]
 
 
 def _reconstruct_classification(state: IncidentState) -> ClassificationResult:

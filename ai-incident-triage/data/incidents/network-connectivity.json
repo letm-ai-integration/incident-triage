@@ -1,0 +1,35 @@
+{
+  "incident_id": "INC-011",
+  "title": "Network connectivity blip between services",
+  "description": "Intermittent TCP connect timeouts between backend-api and its upstream services (db.internal, cache) for several minutes. Connections refused and retried, then recovered on their own.",
+  "source": "mock",
+  "service": "backend-api",
+  "environment": "PRODUCTION",
+  "priority_hint": "P2",
+  "tags": ["network", "connectivity", "backend-api", "connection"],
+  "timestamp": "2026-08-07T05:02:00.000Z",
+  "raw_logs": [
+    "ERROR [backend-api] connection refused from db.internal:9000",
+    "ERROR [backend-api] connection refused from cache.internal:6379",
+    "WARN [backend-api] retrying upstream connection after 500ms"
+  ],
+  "raw_events": [],
+  "raw_alerts": [
+    {
+      "alert_name": "NetworkConnectivityDegraded",
+      "severity": "warning",
+      "fired_at": "2026-08-07T05:02:00.000Z",
+      "labels": {"service": "backend-api", "namespace": "prod"}
+    }
+  ],
+  "raw_metrics": {
+    "connect_error_rate_pct": 12.0,
+    "tcp_connect_timeout_ms": 8000
+  },
+  "metadata": {
+    "scenario_id": "INC-011",
+    "service": "backend-api",
+    "namespace": "prod",
+    "data_sources": ["logs_traces", "metrics"]
+  }
+}
