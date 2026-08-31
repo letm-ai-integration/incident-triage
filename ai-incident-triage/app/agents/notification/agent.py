@@ -21,6 +21,7 @@ from app.domain.models.report import IncidentReport
 from app.guardrails.safety_guard import check_content_safety
 from app.guardrails.sanitize import sanitize_html_email_body
 from app.llm.client import create_structured_agent
+from app.logging_utils import agent_entry, agent_output, agent_exit, agent_error
 from app.tools.adapters.resend_email import EmailSendError, send_email
 from app.tools.mock.oncall import get_current_oncall
 
@@ -83,11 +84,14 @@ def run_notification_agent(
     drafting failure falls back to a deterministic template so delivery still
     happens; only a send failure fails the notification.
     """
+    agent_entry("NotificationAgent", f"incident={rca_report.incident_id}")
     try:
         contact = get_current_oncall()
         logger.info("[notification.agent] on-call recipient=%s (%s)", contact.email, contact.name)
     except Exception as exc:  # noqa: BLE001
         logger.error("[notification.agent] on-call lookup failed: %s", exc)
+        agent_error("NotificationAgent", exc, "on-call lookup failed")
+        agent_exit("NotificationAgent")
         return NotificationResult(success=False, error=str(exc))
 
     try:
@@ -100,6 +104,7 @@ def run_notification_agent(
             type(exc).__name__,
             exc,
         )
+        agent_error("NotificationAgent", exc, "LLM drafting failed, using template")
         email = _draft_email_template(rca_report)
         logger.info("[notification.agent] email drafted via template subject=%r", email.subject)
 
@@ -121,6 +126,10 @@ def run_notification_agent(
         message_id = send_email(to=contact.email, subject=email.subject, html_body=email.body)
     except EmailSendError as exc:
         logger.error("[notification.agent] delivery failed: %s", exc)
+        agent_error("NotificationAgent", exc, "email delivery failed")
+        agent_exit("NotificationAgent")
         return NotificationResult(success=False, error=str(exc))
 
+    agent_output("NotificationAgent", f"delivered to={contact.email} message_id={message_id}")
+    agent_exit("NotificationAgent")
     return NotificationResult(success=True, recipient=contact.email, message_id=message_id)

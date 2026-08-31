@@ -1,0 +1,79 @@
+[
+  {
+    "timestamp": "2026-08-06T10:21:00.000Z",
+    "service": "checkout-service",
+    "pod_name": "checkout-service-7f9c8d-x2k1p",
+    "metric_name": "db_pool_utilization_pct",
+    "value": 100.0
+  },
+  {
+    "timestamp": "2026-08-06T10:22:00.000Z",
+    "service": "checkout-service",
+    "pod_name": "checkout-service-7f9c8d-x2k1p",
+    "metric_name": "wait_queue_depth",
+    "value": 34.0
+  },
+  {
+    "timestamp": "2026-08-06T09:58:00.000Z",
+    "service": "checkout-service",
+    "pod_name": "checkout-service-5a1b2c-p0q9r",
+    "metric_name": "cpu_pct",
+    "value": 99.6
+  },
+  {
+    "timestamp": "2026-08-06T11:05:00.000Z",
+    "service": "orders-worker",
+    "pod_name": "orders-worker-01",
+    "metric_name": "restart_count",
+    "value": 31.0
+  },
+  {
+    "timestamp": "2026-08-06T11:05:00.000Z",
+    "service": "orders-worker",
+    "pod_name": "orders-worker-02",
+    "metric_name": "memory_usage_pct",
+    "value": 99.4
+  },
+  {
+    "timestamp": "2026-08-06T11:47:00.000Z",
+    "service": "product-catalog",
+    "pod_name": "product-catalog-09",
+    "metric_name": "p99_latency_ms",
+    "value": 4820.0
+  },
+  {
+    "timestamp": "2026-08-06T11:47:00.000Z",
+    "service": "product-catalog",
+    "pod_name": "product-catalog-09",
+    "metric_name": "jvm_heap_usage_pct",
+    "value": 95.0
+  },
+  {
+    "timestamp": "2026-08-06T10:24:00.000Z",
+    "service": "cart-service",
+    "pod_name": "cart-service-6d7f4b-t3r7c",
+    "metric_name": "memory_pct",
+    "value": 99.8
+  },
+  {
+    "timestamp": "2026-08-07T05:02:00.000Z",
+    "service": "backend-api",
+    "pod_name": "backend-api-07",
+    "metric_name": "connect_error_rate_pct",
+    "value": 12.0
+  },
+  {
+    "timestamp": "2026-08-06T11:10:00.000Z",
+    "service": "order-service",
+    "pod_name": "order-service-58bd7c-q7l2n",
+    "metric_name": "dependency_error_rate_pct",
+    "value": 100.0
+  },
+  {
+    "timestamp": "2026-08-06T10:50:00.000Z",
+    "service": "inventory-service",
+    "pod_name": "inventory-service-5d4e8a-b2x9q",
+    "metric_name": "error_rate_pct",
+    "value": 22.0
+  }
+]

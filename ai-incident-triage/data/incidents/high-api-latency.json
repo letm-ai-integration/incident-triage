@@ -1,0 +1,63 @@
+{
+  "incident_id": "INC-008",
+  "title": "High API Latency on product-catalog",
+  "description": "product-catalog API p99 latency spiked from ~300ms baseline to over 4,800ms, with intermittent HTTP 503s and high JVM heap usage. The gateway returns Service Unavailable for roughly 1 in 6 requests to this service.",
+  "source": "mock",
+  "service": "product-catalog",
+  "environment": "PRODUCTION",
+  "priority_hint": "P1",
+  "tags": [
+    "api",
+    "latency",
+    "product-catalog",
+    "www",
+    "http503"
+  ],
+  "timestamp": "2026-08-06T11:47:00.000Z",
+  "raw_logs": [
+    "WARN [product-catalog] p95=4820ms p99=5605ms for endpoint /api/v1/products",
+    "ERROR [product-catalog] heap usage 95%, gc_pause_ms=2200",
+    "ERROR nginx 503 Service Unavailable upstream"
+  ],
+  "raw_events": [
+    {
+      "type": "traffic_spike",
+      "service": "product-catalog",
+      "timestamp": "2026-08-06T11:30:00.000Z",
+      "description": "Search request volume up 2.6x following a marketing email send"
+    },
+    {
+      "type": "deployment",
+      "service": "product-catalog",
+      "timestamp": "2026-08-06T10:00:00.000Z",
+      "description": "Deployed product-catalog with an updated search-result caching layer"
+    }
+  ],
+  "raw_alerts": [
+    {
+      "alert_name": "HighHttp503Rate",
+      "severity": "warning",
+      "fired_at": "2026-08-06T11:46:00.000Z",
+      "labels": {"service": "product-catalog", "namespace": "prod"}
+    },
+    {
+      "alert_name": "HeapUsageCritical",
+      "severity": "critical",
+      "fired_at": "2026-08-06T11:47:00.000Z",
+      "labels": {"service": "product-catalog", "namespace": "prod"}
+    }
+  ],
+  "raw_metrics": {
+    "http_503_rate_pct": 16.4,
+    "p99_latency_ms": 4820,
+    "jvm_heap_usage_pct": 95,
+    "gc_pause_ms_avg": 2200
+  },
+  "metadata": {
+    "scenario_id": "INC-008",
+    "service": "product-catalog",
+    "namespace": "prod",
+    "data_sources": ["logs_traces", "metrics"],
+    "runbook": "High API Latency"
+  }
+}

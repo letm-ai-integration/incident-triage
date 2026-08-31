@@ -14,6 +14,7 @@ from app.domain.enums.priority import Priority
 from app.domain.models.classification import ClassificationResult
 from app.domain.models.incident import Incident
 from app.llm.client import create_structured_agent
+from app.logging_utils import agent_entry, agent_output, agent_exit, agent_error
 from app.rules.classification import compute_rule_based_priority, most_urgent
 
 logger = logging.getLogger(__name__)
@@ -25,6 +26,7 @@ def classify_incident(incident: Incident, model: str | None = None) -> Classific
     Computes the deterministic rule floor first, asks the LLM to classify
     against that floor, then reconciles the two before returning.
     """
+    agent_entry("ClassificationAgent", f"incident={incident.incident_id}")
     rule_priority = compute_rule_based_priority(incident)
     logger.info("[classification.agent] rule floor priority=%s incident=%s", rule_priority.value, incident.incident_id)
     agent = create_structured_agent(
@@ -42,6 +44,7 @@ def classify_incident(incident: Incident, model: str | None = None) -> Classific
             }
         )
     except Exception:
+        agent_error("ClassificationAgent", Exception("LLM invocation failed"), f"incident={incident.incident_id}")
         logger.exception(
             "[classification.agent] LLM invocation failed -- check provider base_url "
             "reachability, API key, and network/proxy settings"
@@ -49,7 +52,14 @@ def classify_incident(incident: Incident, model: str | None = None) -> Classific
         raise
     logger.info("[classification.agent] LLM invocation succeeded")
     llm_result = parse_classification_response(response)
-    return _reconcile_with_rule_floor(llm_result, rule_priority)
+    result = _reconcile_with_rule_floor(llm_result, rule_priority)
+    agent_output(
+        "ClassificationAgent",
+        f"type={result.incident_type.value} priority={result.priority.value} "
+        f"confidence={result.confidence:.2f} agrees_with_rule={result.agrees_with_rule}",
+    )
+    agent_exit("ClassificationAgent")
+    return result
 
 
 def _reconcile_with_rule_floor(

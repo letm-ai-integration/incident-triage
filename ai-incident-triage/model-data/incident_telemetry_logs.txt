@@ -1,0 +1,28 @@
+# Application telemetry for incidents INC-006 .. INC-014.
+# Each line is keyed by [service] so the logs RAG can retrieve incident-specific
+# evidence for the corresponding mock incident in data/incidents.
+2026-08-06T10:20:00.000Z ERROR [checkout-service] Timed out waiting for database connection pool 'HikariPool-1' after 30000ms
+2026-08-06T10:21:00.000Z ERROR [checkout-service] SQLTransientConnectionException: HikariPool-1 - Connection is not available, request timed out after 30000ms
+2026-08-06T10:22:00.000Z ERROR [checkout-service] checkout-db-pool active=50 idle=0 waiting=34 utilization=100% threads_blocked=34
+2026-08-06T10:23:00.000Z ERROR [checkout-service] connection acquisition wait time p95=29000ms approaching timeout 30000ms
+2026-08-06T11:04:00.000Z ERROR [orders-worker] java.lang.OutOfMemoryError: Java heap space
+2026-08-06T11:04:30.000Z ERROR [orders-worker] Exception in thread main: java.lang.OutOfMemoryError
+2026-08-06T11:05:00.000Z ERROR [orders-worker] Back-off restarting failed container orders-worker
+2026-08-06T11:05:30.000Z INFO  [orders-worker] started container orders-worker, immediately OOMKilled
+2026-08-06T11:47:00.000Z WARN  [product-catalog] latency spike: p95=4820ms p99=5605ms for endpoint /api/v1/products
+2026-08-06T11:47:30.000Z ERROR [product-catalog] heap usage 95%, gc_pause_ms=2200, OOM risk rising
+2026-08-06T11:47:45.000Z ERROR nginx 503 Service Unavailable upstream product-catalog
+2026-08-06T09:58:00.000Z WARN  [checkout-service] cpu_pct=99.6% for checkout-service replicas, 180 rps
+2026-08-06T09:58:20.000Z INFO  [checkout-service] discount calculation hot path executed 1420 times/s
+2026-08-06T10:24:00.000Z ERROR [cart-service] java.lang.OutOfMemoryError: Java heap space
+2026-08-06T10:24:10.000Z WARN  [cart-service] gc_pause_ms=1800 heap=99.8% before OOMKilled
+2026-08-07T05:02:00.000Z ERROR [backend-api] connection refused from db.internal:9000
+2026-08-07T05:02:05.000Z ERROR [backend-api] connection refused from cache.internal:6379
+2026-08-07T05:02:10.000Z WARN  [backend-api] retrying upstream connection after 500ms, attempt 3
+2026-08-24T06:31:00.000Z ERROR [auth-service] failed to read signing key: no such file /etc/auth/keys/jwt.pem
+2026-08-24T06:31:05.000Z ERROR [auth-service] JWT verification failed: KeyRetrievalException
+2026-08-06T11:10:00.000Z ERROR [order-service] RedisConnectionException: connection refused to redis-cache:6379
+2026-08-06T11:10:05.000Z ERROR [cart-service] cache read timeout after 5000ms from redis-cache
+2026-08-06T11:10:10.000Z WARN  [order-service] circuit breaker OPEN for redis-cache dependency
+2026-08-06T10:50:00.000Z ERROR [inventory-service] ClassCastException: java.lang.String cannot be cast to java.util.Map
+2026-08-06T10:50:05.000Z ERROR [inventory-service] readiness probe failed, pod not ready, error_rate=22.0

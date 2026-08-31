@@ -26,12 +26,15 @@ def test_auto_approve_database_timeout() -> None:
 
 
 def test_auto_approve_unresolved_incident() -> None:
+    # unmatched-no-telemetry.json describes a service with zero coverage in
+    # model-data, so investigation stays inconclusive and runs CLI reports it
+    # as unresolved instead of claiming a RAG-grounded root cause.
     result = runner.invoke(
         app,
-        [str(INCIDENTS / "imagepullbackoff.json"), "--auto-approve"],
+        [str(INCIDENTS / "unmatched-no-telemetry.json"), "--auto-approve"],
     )
     assert result.exit_code == 0
-    assert "ImagePullBackOff" in result.stdout
+    assert "Graviton scheduler queue stalled" in result.stdout
     assert "unresolved" in result.stdout
 
 

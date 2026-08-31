@@ -192,13 +192,16 @@ def test_end_to_end_via_default_orchestrator_node():
 
 
 def test_failing_subagent_dependency_degrades_to_info_evidence(monkeypatch):
-    """A broken sub-agent dependency (mock k8s tool / log keyword scan) must
-    degrade to an ``info`` Evidence item, not kill the investigation."""
+    """A broken sub-agent dependency must degrade to an ``info`` Evidence item,
+    not kill the investigation. The KubernetesAgent's dependency surface is the
+    async entry point the orchestrator awaits; break that."""
 
-    async def exploding_tool(self, **kwargs):
+    async def exploding_fallback(incident, classification=None, llm=None):
         raise RuntimeError("k8s api down")
 
-    monkeypatch.setattr(orchestrator.MockKubernetesTool, "run", exploding_tool)
+    monkeypatch.setattr(
+        orchestrator, "analyze_kubernetes_with_fallback", exploding_fallback
+    )
 
     outcome = investigate(_incident())
 
@@ -223,3 +226,77 @@ def test_failing_log_analysis_degrades_to_info_evidence(monkeypatch):
     assert "failed" in log_ev.finding.lower()
     assert "log backend down" in log_ev.raw_data["error"]
     assert {e.source for e in outcome.evidence} >= {"kubernetes", "runbook"}
+
+
+# ---------------------------------------------------------------------------
+# Test 8: actual agent execution (no mocking) in deterministic mode
+# ---------------------------------------------------------------------------
+
+
+def test_all_subagents_execute_in_deterministic_mode():
+    """Verify that LogAnalysisAgent, KubernetesAgent, and RunbookAgent all
+    genuinely execute when no LLM is provided (deterministic mode)."""
+    outcome = investigate(_incident())
+
+    # All three evidence sources must be present and produced by the agents
+    sources = {e.source for e in outcome.evidence}
+    assert "log_analysis" in sources, "LogAnalysisAgent did not execute"
+    assert "kubernetes" in sources, "KubernetesAgent did not execute"
+    assert "runbook" in sources, "RunbookAgent did not execute"
+
+    # Each evidence item should have real findings (not placeholders)
+    for ev in outcome.evidence:
+        assert ev.finding, f"{ev.source} produced empty finding"
+        assert ev.severity in ("info", "medium", "high"), f"{ev.source} has invalid severity"
+
+    # Runbook should have matched a runbook (score >= threshold)
+    rb_ev = outcome.runbook_analysis
+    assert rb_ev.severity in ("medium", "info")
+    assert "runbook" in rb_ev.finding.lower() or "error" not in rb_ev.finding.lower()
+
+
+def test_subagent_results_appear_in_investigation_state():
+    """Verify subagent outputs are correctly written to shared investigation state."""
+    state = {"incident": _incident()}
+    update = investigation_service(state, {})
+
+    # Per-source evidence fields are present
+    assert update["log_analysis"] is not None
+    assert update["kubernetes_analysis"] is not None
+    assert update["runbook_analysis"] is not None
+
+    # Each has the expected evidence_id
+    assert update["log_analysis"].evidence_id == "ev-log-1"
+    assert update["kubernetes_analysis"].evidence_id == "ev-k8s-1"
+    assert update["runbook_analysis"].evidence_id == "ev-rb-1"
+
+    # Hypotheses and confidence are populated
+    assert update["hypotheses"], "no hypotheses produced"
+    assert update["evidence"], "no evidence produced"
+
+
+def test_end_to_end_lifecycle_logs_present(caplog):
+    """Verify the lifecycle logging trace is present when running through the graph."""
+    import logging
+    import json
+
+    with caplog.at_level(logging.INFO, logger="app.lifecycle"):
+        _run_graph(json.loads((INCIDENTS / "database_timeout.json").read_text(encoding="utf-8")))
+
+    log_text = "\n".join(record.message for record in caplog.records)
+
+    # Investigation orchestrator lifecycle
+    assert "[AGENT][ENTRY] InvestigationOrchestrator" in log_text
+    assert "[AGENT][EXIT] InvestigationOrchestrator" in log_text
+
+    # Subagent lifecycle
+    assert "[SUBAGENT][ENTRY] LogAnalysisAgent" in log_text
+    assert "[SUBAGENT][EXIT] LogAnalysisAgent" in log_text
+    assert "[SUBAGENT][ENTRY] KubernetesAnalysisAgent" in log_text
+    assert "[SUBAGENT][EXIT] KubernetesAnalysisAgent" in log_text
+    assert "[SUBAGENT][ENTRY] RunbookAgent" in log_text
+    assert "[SUBAGENT][EXIT] RunbookAgent" in log_text
+
+    # Node lifecycle
+    assert "[NODE][ENTRY] investigation" in log_text
+    assert "[NODE][EXIT] investigation" in log_text

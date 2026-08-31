@@ -103,3 +103,75 @@ def test_query_building_uses_classification_and_alert(monkeypatch):
     assert "APPLICATION" in captured["query_text"]
     assert "HTTP 503" in captured["query_text"]
     assert "Service Unavailable" in captured["query_text"]
+
+# ---------------------------------------------------------------------------
+# Name-based runbook resolution against the real on-disk ``runbooks/`` files
+# ---------------------------------------------------------------------------
+
+
+def test_resolver_matches_runbook_by_incident_name():
+    from app.agents.investigation.runbook.resolver import resolve_by_name
+
+    doc = resolve_by_name("Database Connection Failure on checkout-db", "pools exhausted")
+    assert doc is not None, "no runbook resolved by incident name"
+    assert doc.name == "Database Connection Failure"
+    assert "runbooks/" in doc.file
+    assert doc.solution.strip(), "matched runbook has no usable Solution section"
+
+
+def test_resolver_ignores_unrelated_incident_names():
+    from app.agents.investigation.runbook.resolver import resolve_by_name
+
+    assert (
+        resolve_by_name("Graviton scheduler queue stalled", "batch queue drain stuck")
+        is None
+    )
+
+
+def test_named_match_returns_verbatim_solution_and_resolution():
+    result = run_runbook_agent(
+        {
+            "title": "Database Connection Failure on checkout-db",
+            "description": "connection pool exhausted, checkouts failing",
+            "raw_logs": ["SQLTransientConnectionException"],
+        },
+        _classification(),
+    )
+    assert result.status == RunbookStatus.MATCHED
+    assert result.runbook_name == "Database Connection Failure"
+    assert result.solution.strip()
+    assert result.resolution.startswith(
+        'A matching runbook was found for "Database Connection Failure"'
+    )
+    assert "recommended resolution from the runbook" in result.resolution
+
+
+def test_semantic_match_without_name_hit_does_not_claim_a_solution(monkeypatch):
+    """FAISS may surface *another* incident's runbook as a candidate. Without a
+    name-based match the agent must recognise the candidate but never present
+    that foreign runbook's solution as this incident's resolution."""
+    from app.knowledge.retriever import RetrievedChunk
+
+    def fake_retrieve(**kwargs):
+        return [
+            RetrievedChunk(
+                text="## High API Latency\n\n**Solution:**\n- Scale out replicas.",
+                metadata={"source_file": "runbooks/high-api-latency.md",
+                          "title": "High API Latency"},
+                score=0.9,
+            )
+        ]
+
+    monkeypatch.setattr(agent_module, "retrieve", fake_retrieve)
+    result = run_runbook_agent(
+        {"title": "Graviton scheduler queue stalled",
+         "description": "batch scheduling threads stopped draining the job queue",
+         "raw_logs": []},
+        _classification(),
+    )
+    # The semantic candidate is acknowledged...
+    assert result.matched_title == "High API Latency"
+    # ...but it must NOT be treated as a solution-backed runbook match.
+    assert not result.solution
+    assert not result.runbook_name
+    assert not result.resolution

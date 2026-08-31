@@ -1,0 +1,42 @@
+[
+  {
+    "id": "model-data:deployments:cart-service",
+    "text": "2026-08-06T08:40:00.000Z ver=v1.9.3 event=completed by=ci-bot",
+    "metadata": {
+      "source": "events",
+      "source_file": "deployment_events.json",
+      "service": "cart-service",
+      "kind": "deployment"
+    }
+  },
+  {
+    "id": "model-data:deployments:checkout-service",
+    "text": "2026-08-06T10:02:00.000Z ver=v2.4.1 event=started by=ci-bot\n2026-08-06T10:03:00.000Z ver=v2.4.1 event=completed by=ci-bot\n2026-08-06T10:23:00.000Z ver=v2.4.0 event=started by=j.reyes\n2026-08-06T10:25:00.000Z ver=v2.4.0 event=completed by=j.reyes",
+    "metadata": {
+      "source": "events",
+      "source_file": "deployment_events.json",
+      "service": "checkout-service",
+      "kind": "deployment"
+    }
+  },
+  {
+    "id": "model-data:deployments:frontend-web",
+    "text": "2026-08-06T10:40:00.000Z ver=v6.7.2 event=completed by=ci-bot",
+    "metadata": {
+      "source": "events",
+      "source_file": "deployment_events.json",
+      "service": "frontend-web",
+      "kind": "deployment"
+    }
+  },
+  {
+    "id": "model-data:deployments:inventory-service",
+    "text": "2026-08-06T10:44:00.000Z ver=v3.1.0 event=started by=ci-bot\n2026-08-06T10:46:00.000Z ver=v3.1.0 event=completed by=ci-bot\n2026-08-06T10:53:00.000Z ver=v3.0.9 event=rolled_back by=m.okafor",
+    "metadata": {
+      "source": "events",
+      "source_file": "deployment_events.json",
+      "service": "inventory-service",
+      "kind": "deployment"
+    }
+  }
+]

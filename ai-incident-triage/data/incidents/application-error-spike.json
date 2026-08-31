@@ -1,0 +1,44 @@
+{
+  "incident_id": "INC-014",
+  "title": "Application error spike on inventory-service",
+  "description": "A new ClassCastException error class appeared on inventory-service immediately after the v3.1.0 rollout, with readiness probe failures. Error rate jumped over 17% then spiked; caused by a bad regression in the release.",
+  "source": "mock",
+  "service": "inventory-service",
+  "environment": "PRODUCTION",
+  "priority_hint": "P1",
+  "tags": ["application", "error", "spike", "inventory", "regression"],
+  "timestamp": "2026-08-06T10:50:00.000Z",
+  "raw_logs": [
+    "ERROR [inventory-service] ClassCastException: java.lang.String cannot be cast to java.util.Map",
+    "ERROR [inventory-service] readiness probe failed, pod not ready",
+    "WARN [inventory-service] error_rate_pct=22.0 p95=640ms"
+  ],
+  "raw_events": [
+    {
+      "type": "deployment",
+      "service": "inventory-service",
+      "timestamp": "2026-08-06T10:44:00.000Z",
+      "description": "Rolled out inventory-service v3.1.0"
+    }
+  ],
+  "raw_alerts": [
+    {
+      "alert_name": "NewErrorTypeAfterDeployment",
+      "severity": "critical",
+      "fired_at": "2026-08-06T10:50:00.000Z",
+      "labels": {"service": "inventory-service", "namespace": "prod"}
+    }
+  ],
+  "raw_metrics": {
+    "error_rate_pct": 22.0,
+    "p95_latency_ms": 640,
+    "readiness_failures": 4
+  },
+  "metadata": {
+    "scenario_id": "INC-014",
+    "service": "inventory-service",
+    "namespace": "prod",
+    "deploy_version": "v3.1.0",
+    "data_sources": ["logs_traces", "metrics", "deployment_events"]
+  }
+}

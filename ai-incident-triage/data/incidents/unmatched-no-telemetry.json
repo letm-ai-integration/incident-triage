@@ -1,0 +1,31 @@
+{
+  "incident_id": "INC-SIM-3001",
+  "title": "Graviton scheduler queue stalled",
+  "description": "Batch scheduling threads on graviton-scheduler stopped draining the job queue after tonight's config push.",
+  "source": "pagerduty",
+  "service": "graviton-scheduler",
+  "environment": "PRODUCTION",
+  "priority_hint": "P3",
+  "tags": [
+    "scheduler",
+    "graviton-scheduler"
+  ],
+  "timestamp": "2026-08-26T02:12:00+00:00",
+  "logs": [],
+  "events": [],
+  "alerts": [
+    {
+      "name": "QueueDrainStalled",
+      "severity": "warning",
+      "fired_at": "2026-08-26T02:10:00+00:00"
+    }
+  ],
+  "metrics": {
+    "queue_depth": 4200,
+    "workers_alive": 1
+  },
+  "metadata": {
+    "region": "us-east-2",
+    "on_call_team": "PLATFORM"
+  }
+}

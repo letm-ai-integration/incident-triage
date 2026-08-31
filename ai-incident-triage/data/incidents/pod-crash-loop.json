@@ -1,0 +1,59 @@
+{
+  "incident_id": "INC-007",
+  "title": "Pod Crash Loop on orders-worker (OOMKilled)",
+  "description": "orders-worker pods crash immediately after startup and loop in CrashLoopBackOff. Pod restart count is high and the previous container terminated with OOMKilled because the heap grows past the 1024Mi memory limit within minutes of starting.",
+  "source": "mock",
+  "service": "orders-worker",
+  "environment": "PRODUCTION",
+  "priority_hint": "P1",
+  "tags": [
+    "kubernetes",
+    "pod",
+    "crash",
+    "loop",
+    "oom",
+    "orders-worker"
+  ],
+  "timestamp": "2026-08-06T11:05:00.000Z",
+  "raw_logs": [
+    "ERROR [orders-worker] java.lang.OutOfMemoryError: Java heap space",
+    "WARN [kubelet] Back-off restarting failed container orders-worker",
+    "ERROR [orders-worker] restarted 4 times, CrashLoopBackOff"
+  ],
+  "raw_events": [
+    {
+      "type": "deployment",
+      "service": "orders-worker",
+      "timestamp": "2026-08-06T11:00:00.000Z",
+      "description": "Rolled out orders-worker v2.7.0 without a memory-limit change"
+    }
+  ],
+  "raw_alerts": [
+    {
+      "alert_name": "PodCrashLoopBackOff",
+      "severity": "critical",
+      "fired_at": "2026-08-06T11:04:00.000Z",
+      "labels": {"service": "orders-worker", "namespace": "prod"}
+    },
+    {
+      "alert_name": "OOMKilledRestartLoop",
+      "severity": "critical",
+      "fired_at": "2026-08-06T11:05:00.000Z",
+      "labels": {"service": "orders-worker", "namespace": "prod"}
+    }
+  ],
+  "raw_metrics": {
+    "pods_desired": 3,
+    "pods_ready": 0,
+    "pods_crashloopbackoff": 3,
+    "restart_count_last_10m": 31,
+    "memory_usage_pct": 99.4
+  },
+  "metadata": {
+    "scenario_id": "INC-007",
+    "service": "orders-worker",
+    "namespace": "prod",
+    "data_sources": ["k8s_logs", "metrics"],
+    "runbook": "Pod Crash Loop"
+  }
+}
