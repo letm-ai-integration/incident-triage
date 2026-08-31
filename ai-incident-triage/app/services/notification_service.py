@@ -55,4 +55,13 @@ def notification_service(state: dict[str, Any], deps: dict[str, Any]) -> dict[st
         update["errors"] = state.get("errors", []) + [
             f"notification failed: {result.error}"
         ]
+
+    # Best-effort Runbook Learning Loop side-effect
+    try:
+        from app.services.runbook_learning_service import run_runbook_learning_loop
+        learning_update = run_runbook_learning_loop(state)
+        update.update(learning_update)
+    except Exception as exc:
+        logger.error("[notification_service] unhandled exception in learning loop: %s", exc)
+
     return update

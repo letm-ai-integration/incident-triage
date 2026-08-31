@@ -49,6 +49,7 @@ class Settings(BaseSettings):
     llm_max_tokens: int = 2048
     llm_timeout: int = 60
     llm_max_retries: int = 3
+    runbook_update_similarity_threshold: float = 0.80
 
     # Local embedding model + FAISS vector store (mirrors the rag-qna-bot-poc
     # stack: sentence-transformers/all-MiniLM-L6-v2, embedded, no API key).
