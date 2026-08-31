@@ -3,7 +3,7 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-from app.services.runbook_learning_service import run_runbook_learning_loop, _append_to_runbook, _create_new_runbook
+from app.services.runbook_learning_service import run_runbook_learning_loop, _append_to_runbook, _create_new_runbook, _slugify_segment, _generate_runbook_filename
 from app.services.notification_service import notification_service
 from app.domain.enums.priority import Priority
 from app.domain.enums.incident_type import IncidentType
@@ -71,7 +71,58 @@ def mock_incident_state():
         "incident_report": report
     }
 
+def test_slugify_segment():
+    assert _slugify_segment("Payment-API") == "payment-api"
+    assert _slugify_segment("OOMKilled! ") == "oomkilled"
+    assert _slugify_segment("some/long/path/with:colons") == "some-long-path-with-colons"
+    assert _slugify_segment("  spaces   and  --  hyphens  ") == "spaces-and-hyphens"
+    assert _slugify_segment(None) == "unknown"
+    assert _slugify_segment("") == "unknown"
+    assert _slugify_segment("a" * 50, max_length=10) == "a" * 10
 
+
+def test_generate_runbook_filename(mock_incident_state, tmp_path):
+    # Test normal generation
+    file_path = _generate_runbook_filename(
+        mock_incident_state["incident"],
+        mock_incident_state["classification"],
+        tmp_path
+    )
+    assert file_path.name == "database--backend--production.md"
+    
+    # Test fallback generation
+    mock_incident_state["classification"].incident_type = None
+    mock_incident_state["incident"].service = ""
+    mock_incident_state["incident"].environment = None
+    
+    file_path2 = _generate_runbook_filename(
+        mock_incident_state["incident"],
+        mock_incident_state["classification"],
+        tmp_path
+    )
+    assert file_path2.name == "generic--cluster-wide--unknown-env.md"
+    
+    # Restore mock for collision
+    mock_incident_state["classification"].incident_type = IncidentType.DATABASE
+    mock_incident_state["incident"].service = "backend"
+    mock_incident_state["incident"].environment = Environment.PRODUCTION
+    
+    # Test collision handling
+    file_path.touch()
+    file_path_col1 = _generate_runbook_filename(
+        mock_incident_state["incident"],
+        mock_incident_state["classification"],
+        tmp_path
+    )
+    assert file_path_col1.name == "database--backend--production-2.md"
+    file_path_col1.touch()
+    
+    file_path_col2 = _generate_runbook_filename(
+        mock_incident_state["incident"],
+        mock_incident_state["classification"],
+        tmp_path
+    )
+    assert file_path_col2.name == "database--backend--production-3.md"
 def test_similarity_threshold_above(mock_incident_state, tmp_path):
     mock_runbook = tmp_path / "test_runbook.md"
     mock_runbook.write_text("# Old Runbook\n")
@@ -129,6 +180,7 @@ def test_similarity_threshold_below(mock_incident_state, tmp_path):
         new_file = Path(result["runbook_learning_file_touched"])
         assert new_file.exists()
         assert new_file.parent == tmp_path
+        assert new_file.name == "database--backend--production.md"
         
         content = new_file.read_text()
         assert "title: DB Timeout" in content
@@ -173,6 +225,7 @@ def test_markdown_create_logic(mock_incident_state, tmp_path):
         
         new_file = Path(file_path)
         assert new_file.exists()
+        assert new_file.name == "database--backend--production.md"
         content = new_file.read_text()
         # Verify markdown stripping logic worked
         assert content == "---\ntitle: test\n---\n# Content"

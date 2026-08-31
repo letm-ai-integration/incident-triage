@@ -104,6 +104,44 @@ def _append_to_runbook(file_path: str, incident_id: str, classification, rca, ve
     with open(file_path, "a", encoding="utf-8") as f:
         f.write(append_content)
 
+import re
+
+def _slugify_segment(text: str | None, max_length: int = 40, fallback: str = "unknown") -> str:
+    if not text:
+        return fallback
+    text = str(text).lower()
+    text = text[:max_length]
+    # Replace non-alphanumeric and non-hyphen with hyphen
+    text = re.sub(r'[^a-z0-9-]+', '-', text)
+    # Collapse multiple hyphens
+    text = re.sub(r'-+', '-', text)
+    text = text.strip('-')
+    return text or fallback
+
+def _generate_runbook_filename(incident, classification, directory: Path) -> Path:
+    if classification and getattr(classification, "incident_type", None):
+        # Fallback to 'generic' if missing/invalid
+        failure_mode = _slugify_segment(classification.incident_type.value, fallback="generic")
+    else:
+        failure_mode = "generic"
+        
+    service_val = getattr(incident, "service", None)
+    service = _slugify_segment(service_val, fallback="cluster-wide")
+    
+    env_val = incident.environment.value if getattr(incident, "environment", None) else None
+    environment = _slugify_segment(env_val, fallback="unknown-env")
+    
+    base_name = f"{failure_mode}--{service}--{environment}"
+    
+    file_path = directory / f"{base_name}.md"
+    suffix = 2
+    while file_path.exists():
+        # Collision handling for same generated base name but distinct issue
+        file_path = directory / f"{base_name}-{suffix}.md"
+        suffix += 1
+        
+    return file_path
+
 
 def _create_new_runbook(incident, classification, rca, verification, report) -> str:
     """Use the LLM to synthesize a new runbook markdown file."""
@@ -158,16 +196,10 @@ Recommended Actions: {', '.join(report.recommended_actions)}
         content = content[:-3]
     content = content.strip()
     
-    # Generate filename
-    import re
-    safe_title = re.sub(r'[^a-z0-9]+', '-', incident.title.lower()).strip('-')
-    if not safe_title:
-        safe_title = incident.incident_id.lower()
-    
     RUNBOOKS_DIR.mkdir(parents=True, exist_ok=True)
-    file_path = str(RUNBOOKS_DIR / f"{safe_title}.md")
+    file_path = _generate_runbook_filename(incident, classification, RUNBOOKS_DIR)
     
     with open(file_path, "w", encoding="utf-8") as f:
         f.write(content)
         
-    return file_path
+    return str(file_path)
