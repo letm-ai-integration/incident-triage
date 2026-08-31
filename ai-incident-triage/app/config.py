@@ -40,6 +40,11 @@ class Settings(BaseSettings):
     groq_model: str = "llama-3.3-70b-versatile"
     groq_base_url: str = "https://api.groq.com/openai/v1"
 
+    # Content-safety guardrail (app/guardrails/backends/custom_backend.py): an
+    # optional Llama Guard call via Groq, independent of LLM_PROVIDER. Falls
+    # back to a keyword check when groq_api_key is unset.
+    groq_guard_model: str = "meta-llama/llama-guard-4-12b"
+
     llm_temperature: float = 0.2
     llm_max_tokens: int = 2048
     llm_timeout: int = 60

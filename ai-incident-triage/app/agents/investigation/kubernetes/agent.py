@@ -8,6 +8,7 @@ from app.agents.investigation.kubernetes.parser import KubernetesAnalysisResult,
 from app.agents.investigation.kubernetes.prompt import build_kubernetes_prompt
 from app.domain.models.classification import ClassificationResult
 from app.domain.models.incident import Incident
+from app.guardrails.prompt_injection import check_prompt_injection
 from app.llm.client import create_structured_agent
 from app.tools.mock.kubernetes import MockKubernetesTool
 
@@ -36,6 +37,14 @@ async def analyze_kubernetes(
 
     # 2. Build user prompt
     user_prompt = build_kubernetes_prompt(incident, tool_output)
+
+    guard_result = check_prompt_injection("kubernetes", user_prompt)
+    if not guard_result.passed:
+        logger.warning(
+            "[kubernetes.agent] prompt-injection guardrail flagged incident=%s findings=%s",
+            incident.incident_id,
+            guard_result.findings,
+        )
 
     # 3. Create structured agent
     agent = create_structured_agent(

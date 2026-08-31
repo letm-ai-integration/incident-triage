@@ -88,3 +88,8 @@ class IncidentState(TypedDict, total=False):
 
     # 9. Notification
     notification_status: NotificationStatus
+
+    # 10. Guardrails
+    # Accumulated (never overwritten) findings from every step guardrail that
+    # ran and failed, across every node -- see app/guardrails/.
+    guardrail_findings: list[dict]

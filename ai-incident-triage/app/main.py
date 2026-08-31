@@ -133,6 +133,11 @@ def triage(
         for error in result["errors"]:
             typer.echo(f"  - {error}")
 
+    if result.get("guardrail_findings"):
+        typer.echo("Guardrail findings:")
+        for finding in result["guardrail_findings"]:
+            typer.echo(f"  - [{finding['node']}/{finding['check']}] {finding['findings']}")
+
 
 if __name__ == "__main__":
     app()

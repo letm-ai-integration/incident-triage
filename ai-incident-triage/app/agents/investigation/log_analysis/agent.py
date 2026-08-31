@@ -9,6 +9,7 @@ from app.agents.investigation.log_analysis.parser import LogAnalysisResult, pars
 from app.agents.investigation.log_analysis.prompt import build_log_analysis_prompt
 from app.domain.models.classification import ClassificationResult
 from app.domain.models.incident import Incident
+from app.guardrails.prompt_injection import check_prompt_injection
 from app.llm.client import create_structured_agent
 from app.tools.mock.logs import MockLogTool
 
@@ -37,6 +38,14 @@ async def analyze_logs(
 
     # 2. Build user prompt
     user_prompt = build_log_analysis_prompt(incident, logs_text)
+
+    guard_result = check_prompt_injection("log_analysis", user_prompt)
+    if not guard_result.passed:
+        logger.warning(
+            "[log_analysis.agent] prompt-injection guardrail flagged incident=%s findings=%s",
+            incident.incident_id,
+            guard_result.findings,
+        )
 
     # 3. Create structured agent
     agent = create_structured_agent(
