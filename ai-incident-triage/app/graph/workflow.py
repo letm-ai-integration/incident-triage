@@ -38,6 +38,7 @@ from app.graph.router import (
     route_after_verification,
 )
 from app.graph.state import IncidentState
+from app.telemetry.tracing import get_langfuse_callback_handlers
 
 
 def build_triage_graph():
@@ -144,7 +145,7 @@ def stream_triage_graph(
             "trace_handler": callback_handler,
         },
         "recursion_limit": 50,
-        "callbacks": [callback_handler],
+        "callbacks": [callback_handler, *get_langfuse_callback_handlers()],
     }
 
     def _generator():

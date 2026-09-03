@@ -139,9 +139,9 @@ def triage(
         for error in final_state["errors"]:
             typer.echo(f"  - {error}")
 
-    if result.get("guardrail_findings"):
+    if final_state.get("guardrail_findings"):
         typer.echo("Guardrail findings:")
-        for finding in result["guardrail_findings"]:
+        for finding in final_state["guardrail_findings"]:
             typer.echo(f"  - [{finding['node']}/{finding['check']}] {finding['findings']}")
 
 

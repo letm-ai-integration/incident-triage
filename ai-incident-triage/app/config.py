@@ -63,6 +63,15 @@ class Settings(BaseSettings):
     resend_from_email: str = "ayushofficeworkprofile@gmail.com"
     resend_from_name: str = "Incident Triage Bot"
 
+    # Langfuse tracing (app/telemetry/tracing.py). Optional -- passed explicitly
+    # to the Langfuse client/callback handler rather than relying on the SDK's
+    # own ambient-env-var lookup, since nothing in this app calls
+    # ``load_dotenv()`` (pydantic-settings' ``env_file`` only populates this
+    # Settings object, not ``os.environ``).
+    langfuse_public_key: str | None = None
+    langfuse_secret_key: str | None = None
+    langfuse_base_url: str = "https://cloud.langfuse.com"
+
     def active_llm_config(self) -> dict:
         """Single source of truth for which provider is active and its settings."""
         if self.llm_provider == LLMProvider.GROQ:
