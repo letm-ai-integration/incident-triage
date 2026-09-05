@@ -6,8 +6,6 @@
 # ``IncidentReport.verification`` field in sync via ``model_copy``.
 from __future__ import annotations
 
-from typing import Optional
-
 from langchain_core.runnables import RunnableConfig
 
 from app.domain.constants import DEFAULT_CONFIDENCE_SCORE
@@ -17,7 +15,7 @@ from app.graph.builder import get_deps
 from app.graph.state import IncidentState
 
 
-def verification_node(state: IncidentState, config: Optional[RunnableConfig] = None) -> dict:
+def verification_node(state: IncidentState, config: RunnableConfig | None = None) -> dict:
     """Verify the resolution and write the ``VerificationResult`` to state."""
     deps = get_deps(config)
     service = deps.get("verification_service", _default_verify)
@@ -44,8 +42,9 @@ def _default_verify(state: IncidentState, deps: dict) -> dict:
         result = VerificationResult(
             is_resolved=True,
             resolution_evidence=(
-                f"Root-cause confidence {root_cause.confidence_score} meets the "
-                "threshold and an expected resolution action exists."
+                f"Diagnosis verified: root-cause confidence {root_cause.confidence_score} "
+                "meets the threshold and a runbook-recommended fix exists. No fix has "
+                "been applied by this system; remediation is pending on-call action."
             ),
             needs_reinvestigation=False,
             reinvestigation_hints=[],

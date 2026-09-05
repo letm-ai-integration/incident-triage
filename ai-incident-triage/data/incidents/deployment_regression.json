@@ -13,8 +13,28 @@
     "v3.1.0"
   ],
   "timestamp": "2026-08-06T10:47:00.000Z",
-  "raw_logs": [],
-  "raw_events": [],
+  "raw_logs": [
+    "2026-08-06T10:47:12.000Z ERROR [inventory-service] java.lang.ClassCastException: class StockLevel cannot be cast to class StockLevelV2 (inventory-service v3.1.0)",
+    "2026-08-06T10:48:04.300Z ERROR [inventory-service] uncaught exception in request handler: ClassCastException at StockMapper.map(StockMapper.java:88)",
+    "2026-08-06T10:49:22.700Z WARN  [kubelet] readiness probe \"http-get /healthz\" failing for pod inventory-service-5d92a-1: HTTP 500",
+    "2026-08-06T10:50:41.100Z ERROR [lb-inventory] 5xx error rate 31% on /v1/stock/* (baseline 0.1%) after v3.1.0 rollout",
+    "2026-08-06T10:52:08.900Z INFO  [deploy-controller] rollback inventory-service v3.1.0 -> v3.0.9 initiated by on-call",
+    "2026-08-06T10:58:35.400Z INFO  [inventory-service] v3.0.9 pods ready 6/6; error rate recovered to 0.2%"
+  ],
+  "raw_events": [
+    {
+      "type": "deployment",
+      "service": "inventory-service",
+      "timestamp": "2026-08-06T10:45:00.000Z",
+      "description": "Rolled out inventory-service v3.1.0 (StockLevel model refactored to StockLevelV2)"
+    },
+    {
+      "type": "rollback",
+      "service": "inventory-service",
+      "timestamp": "2026-08-06T10:52:00.000Z",
+      "description": "Rolled back to v3.0.9 after new ClassCastException error class and readiness failures"
+    }
+  ],
   "raw_alerts": [
     {
       "alert_name": "NewErrorTypeAfterDeployment",
@@ -26,9 +46,17 @@
       }
     }
   ],
-  "raw_metrics": {},
+  "raw_metrics": {
+    "http_5xx_rate_pct": 31.0,
+    "new_error_class_count_last_10m": 4128,
+    "pods_not_ready": 1,
+    "pods_desired": 6,
+    "error_rate_after_rollback_pct": 0.2
+  },
   "metadata": {
     "scenario_id": "INC-005",
+    "service": "inventory-service",
+    "namespace": "prod",
     "pod_prefix": "inventory-service",
     "deploy_version": "v3.1.0",
     "trace_id_prefix": "f00dface",
@@ -43,6 +71,7 @@
       "k8s_logs",
       "metrics",
       "deployment_events"
-    ]
+    ],
+    "runbook": "Deployment Regression"
   }
 }

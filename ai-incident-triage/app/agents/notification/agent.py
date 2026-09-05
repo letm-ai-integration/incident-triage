@@ -1,6 +1,9 @@
 """
-Notification agent: composes and sends an email summarizing a resolved
-incident's RCA report to the current on-call/support developer.
+Notification agent: composes and sends an email summarizing a completed
+root-cause analysis (investigation findings + recommended runbook fix) to the
+current on-call/support developer. This pipeline investigates and diagnoses
+only -- it never applies a fix, so the email always frames actions as
+recommendations, never as completed remediation.
 
 Recipient resolution is a deterministic mock lookup (``tools/mock/oncall.py``),
 not an LLM decision; the LLM only drafts the email text from the report's actual
@@ -8,8 +11,8 @@ fields; delivery happens via the thin Resend adapter (``tools/adapters``).
 """
 from __future__ import annotations
 
+import html
 import logging
-
 from dataclasses import dataclass
 
 from app.agents.notification.parser import (
@@ -17,6 +20,7 @@ from app.agents.notification.parser import (
     parse_notification_response,
 )
 from app.agents.notification.prompt import SYSTEM_PROMPT, build_user_prompt
+from app.domain.models.hypothesis import HypothesisLabel
 from app.domain.models.report import IncidentReport
 from app.guardrails.safety_guard import check_content_safety
 from app.guardrails.sanitize import sanitize_html_email_body
@@ -53,21 +57,78 @@ def _draft_email_llm(rca_report: IncidentReport, contact, model: str | None) -> 
 
 
 def _draft_email_template(rca_report: IncidentReport) -> NotificationEmail:
-    """Deterministic fallback draft built from the report's own fields."""
-    subject = (
-        f"[{rca_report.classification.priority.value}] "
-        f"{rca_report.incident_id} - RCA report"
+    """Deterministic fallback draft built from the report's own fields.
+
+    Mirrors the LLM prompt's required structure (What happened / Impacted
+    services / Steps to be taken as per Runbook for fix / Note) so the
+    no-LLM path produces the same investigation-not-remediation framing with
+    a full causal-chain narrative, composed only from report data.
+    """
+    classification = rca_report.classification
+    root_cause = rca_report.root_cause
+    services = ", ".join(classification.affected_services) or "the affected service(s)"
+    contributing = [h.description for h in root_cause.contributing_factors if h.label != HypothesisLabel.UNLIKELY]
+
+    # "What happened" narrative: >= 5 sentences walking the causal chain from
+    # trigger -> propagation -> user-visible symptom, using only report fields.
+    narrative = [
+        (
+            f"Incident {rca_report.incident_id} ({classification.incident_type.value}, "
+            f"priority {classification.priority.value}) was raised against {services}."
+        ),
+        f"Investigation identified the trigger: {root_cause.primary_cause.description}.",
+    ]
+    if contributing:
+        narrative.append(
+            "The following contributing factors fed into the failure: "
+            + "; ".join(contributing)
+            + "."
+        )
+    if rca_report.evidence.summary:
+        narrative.append(f"Corroborating evidence collected during investigation: {rca_report.evidence.summary}.")
+    if root_cause.timeline:
+        steps = "; ".join(f"{e.timestamp} {e.description}" for e in root_cause.timeline)
+        narrative.append(f"Reconstructed timeline: {steps}.")
+    narrative.append(
+        "The end-user-visible symptom was degraded behaviour on the affected "
+        "service(s) while this condition persisted."
     )
+    narrative.append(
+        "Root-cause analysis is complete; no remediation has been applied by "
+        "this system, and the fix remains pending on-call action."
+    )
+
+    runbook_actions = [
+        a for a in rca_report.recommended_actions if a.lower().startswith("follow runbook")
+    ]
+    other_actions = [a for a in rca_report.recommended_actions if a not in runbook_actions]
+    recommendations = runbook_actions + other_actions
+
+    subject = (
+        f"[{classification.priority.value}] {rca_report.incident_id} - "
+        f"RCA complete, remediation recommended"
+    )
+    if recommendations:
+        action_items = "".join(f"<li>{html.escape(action)}</li>" for action in recommendations)
+    else:
+        action_items = "<li>(none listed)</li>"
     body = (
         f"<h2>Incident {rca_report.incident_id} - RCA Report</h2>"
-        f"<p><b>Type:</b> {rca_report.classification.incident_type.value}</p>"
-        f"<p><b>Affected services:</b> "
-        f"{', '.join(rca_report.classification.affected_services) or 'n/a'}</p>"
-        f"<p><b>Root cause:</b> {rca_report.root_cause.primary_cause.description}</p>"
-        f"<p><b>Recommended actions:</b></p>"
-        f"<ul>"
-        + "".join(f"<li>{action}</li>" for action in rca_report.recommended_actions)
+        "<h3>What happened</h3>"
+        + "".join(f"<p>{html.escape(sentence)}</p>" for sentence in narrative)
+        + "<h3>Impacted services</h3>"
+        f"<p><b>Type:</b> {classification.incident_type.value} · "
+        f"<b>Severity:</b> {classification.priority.value} · "
+        f"<b>Services:</b> {services}</p>"
+        f"<p><b>Root cause (confidence {root_cause.confidence_score:.2f}):</b> "
+        f"{html.escape(root_cause.primary_cause.description)}</p>"
+        "<h3>Steps to be taken as per Runbook for fix:</h3>"
+        "<ul>"
+        + action_items
         + "</ul>"
+        "<p><b>Note:</b> This system performed investigation and root-cause "
+        "analysis only. No fix has been applied; remediation is pending "
+        "on-call action per the runbook above.</p>"
     )
     return NotificationEmail(subject=subject, body=body)
 

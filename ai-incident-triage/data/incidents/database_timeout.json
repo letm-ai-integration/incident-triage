@@ -12,29 +12,38 @@
     "connection-pool",
     "timeout"
   ],
-  "timestamp": "2026-08-24T09:14:32+00:00",
-  "events": [
+  "timestamp": "2026-08-24T09:14:32.000Z",
+  "raw_logs": [
+    "2026-08-24T09:06:12.400Z WARN  [checkout-service] db pool utilization 88% (88/100), wait queue forming",
+    "2026-08-24T09:08:47.100Z ERROR [checkout-service] Timed out waiting for database connection pool 'HikariPool-1' after 30000ms",
+    "2026-08-24T09:10:22.900Z ERROR [checkout-db] too many connections for role checkout_app: 100/100 slots in use",
+    "2026-08-24T09:11:38.500Z ERROR [checkout-service] SQLTransientConnectionException: HikariPool-1 - Connection is not available, request timed out after 30000ms",
+    "2026-08-24T09:12:55.300Z WARN  [checkout-service] connection acquisition wait p95=29200ms; wait queue depth 214",
+    "2026-08-24T09:14:10.800Z ERROR [lb-checkout] 37.5% of checkout requests failing with 500/503 during pool exhaustion window"
+  ],
+  "raw_events": [
     {
       "type": "deployment",
       "service": "checkout-service",
-      "timestamp": "2026-08-24T08:55:00+00:00",
+      "timestamp": "2026-08-24T08:55:00.000Z",
       "description": "Rolled out checkout-service v2.14.0 (raised default query timeout, no pool size change)"
     },
     {
       "type": "traffic_spike",
       "service": "checkout-service",
-      "timestamp": "2026-08-24T09:05:00+00:00",
+      "timestamp": "2026-08-24T09:05:00.000Z",
       "description": "Request rate 4.2x above 7-day baseline (flash sale campaign)"
     }
   ],
-  "alerts": [
+  "raw_alerts": [
     {
-      "name": "DatabaseConnectionPoolSaturation",
+      "alert_name": "DatabaseConnectionPoolSaturation",
       "severity": "critical",
-      "fired_at": "2026-08-24T09:12:00+00:00"
+      "fired_at": "2026-08-24T09:12:00.000Z",
+      "labels": {"service": "checkout-db", "namespace": "checkout"}
     }
   ],
-  "metrics": {
+  "raw_metrics": {
     "db_pool_active_connections": 100,
     "db_pool_max_connections": 100,
     "db_pool_wait_queue_depth": 214,
@@ -42,7 +51,11 @@
     "requests_per_second": 842
   },
   "metadata": {
+    "scenario_id": "INC-DB-1001",
+    "service": "checkout-service",
+    "namespace": "checkout",
     "region": "ap-southeast-2",
-    "on_call_team": "DBA"
+    "data_sources": ["db_logs", "logs_traces", "metrics"],
+    "runbook": "Database Connection Pool Exhausted"
   }
 }

@@ -11,29 +11,44 @@
     "payments-worker",
     "imagepull"
   ],
-  "timestamp": "2026-08-24T08:41:12+00:00",
-  "logs": [],
-  "events": [
+  "timestamp": "2026-08-24T08:41:12.000Z",
+  "raw_logs": [
+    "2026-08-24T08:31:05.000Z INFO  [deploy-controller] rollout payments-worker tag 0.9.8 started (desired 3 replicas)",
+    "2026-08-24T08:32:18.400Z ERROR [kubelet] Failed to pull image \"registry.mockcorp.io/payments/payments-worker:0.9.8\": rpc error: code = NotFound desc = manifest unknown: tag 0.9.8 does not exist in registry",
+    "2026-08-24T08:33:02.900Z WARN  [kubelet] Back-off pulling image \"registry.mockcorp.io/payments/payments-worker:0.9.8\" (BackOff 1m20s)",
+    "2026-08-24T08:35:44.100Z ERROR [kubelet] Error syncing pod payments-worker-7c4d9-2: ImagePullBackOff (will retry, count 5)",
+    "2026-08-24T08:38:27.600Z WARN  [deploy-controller] rollout payments-worker stuck at 0/3 ready for 8m27s",
+    "2026-08-24T08:40:52.300Z ERROR [k8s-probe] payments-worker serving capacity 0%: all 3 pods ImagePullBackOff"
+  ],
+  "raw_events": [
     {
       "type": "deployment",
       "service": "payments-worker",
-      "timestamp": "2026-08-24T08:30:00+00:00",
+      "timestamp": "2026-08-24T08:30:00.000Z",
       "description": "Rolled out payments-worker with image tag 0.9.8; rollout stuck at 0/3 ready"
     }
   ],
-  "alerts": [
+  "raw_alerts": [
     {
-      "name": "PodStuckProgressing",
+      "alert_name": "PodStuckProgressing",
       "severity": "warning",
-      "fired_at": "2026-08-24T08:40:00+00:00"
+      "fired_at": "2026-08-24T08:40:00.000Z",
+      "labels": {"service": "payments-worker", "namespace": "payments"}
     }
   ],
-  "metrics": {
+  "raw_metrics": {
     "replicas_ready": 0,
-    "replicas_desired": 3
+    "replicas_desired": 3,
+    "image_pull_failures_last_15m": 11,
+    "serving_capacity_pct": 0
   },
   "metadata": {
-    "region": "us-east-1",
-    "on_call_team": "PLATFORM"
+    "scenario_id": "INC-K8S-2001",
+    "service": "payments-worker",
+    "namespace": "payments",
+    "pod_prefix": "payments-worker",
+    "data_sources": ["k8s_events", "logs_traces", "metrics"],
+    "runbook": "ImagePullBackOff"
   }
 }
+

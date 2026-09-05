@@ -56,6 +56,7 @@ def build_incident_report(
     runbook_references: list[RunbookReference] | None = None,
     approval: ApprovalDecision | None = None,
     created_at: datetime | None = None,
+    recommended_actions: list[str] | None = None,
 ) -> IncidentReport:
     """Assemble the canonical IncidentReport from each stage's already-typed output."""
     return IncidentReport(
@@ -64,7 +65,11 @@ def build_incident_report(
         evidence=evidence,
         hypotheses=hypotheses,
         root_cause=root_cause,
-        recommended_actions=_derive_recommended_actions(root_cause, runbook_references or []),
+        recommended_actions=(
+            recommended_actions
+            if recommended_actions is not None
+            else _derive_recommended_actions(root_cause, runbook_references or [])
+        ),
         runbook_references=runbook_references or [],
         verification=verification,
         approval=approval,
@@ -87,7 +92,12 @@ def _derive_recommended_actions(
             "Confidence is low -- continue investigation before acting on this root cause."
         )
     else:
-        actions.append(f"Investigate and remediate: {root_cause.primary_cause.description}")
+        # Recommendation framing: this system diagnosed the cause; applying the
+        # fix is the on-call engineer's action, not something the system did.
+        actions.append(
+            f"Runbook recommends remediating the diagnosed cause: "
+            f"{root_cause.primary_cause.description}"
+        )
     for factor in root_cause.contributing_factors:
         if factor.label != HypothesisLabel.UNLIKELY:
             actions.append(f"Rule out contributing factor: {factor.description}")
@@ -205,10 +215,16 @@ def _render_runbooks(runbook_references: list[RunbookReference]) -> str:
 
 
 def _render_verification(verification: VerificationResult) -> str:
-    status = "✅ Resolved" if verification.is_resolved else "❌ Not resolved"
+    # Framing: "verified" here means the diagnosis/RCA is confirmed and a
+    # recommended fix exists -- NOT that a fix was applied by this system.
+    status = (
+        "✅ Diagnosis verified (RCA complete — remediation pending, no fix applied by this system)"
+        if verification.is_resolved
+        else "❌ Diagnosis not confirmed — needs reinvestigation"
+    )
     lines = [f"## Verification\n\n- **Status:** {status}"]
     if verification.resolution_evidence:
-        lines.append(f"- **Resolution evidence:** {verification.resolution_evidence}")
+        lines.append(f"- **Diagnosis evidence:** {verification.resolution_evidence}")
     if verification.needs_reinvestigation:
         hints = ", ".join(verification.reinvestigation_hints) or "(none given)"
         lines.append(f"- **Needs reinvestigation:** yes -- {hints}")
@@ -247,6 +263,45 @@ def rca_report_service(state: dict[str, Any], deps: dict[str, Any]) -> dict[str,
         incident, classification, evidence, hypotheses, model=deps.get("rca_model")
     )
 
+    # Name-keyed runbook match (same lookup as the rule-based fallback node):
+    # surfaces the runbook's actual ``## Solution`` in the final result so the
+    # notification can cite it verbatim, phrased as a recommendation.
+    runbook_doc = _resolve_runbook_doc(incident)
+    runbook_references: list[RunbookReference] = []
+    if runbook_doc is not None:
+        runbook_references = [
+            RunbookReference(
+                runbook_id=runbook_doc.name,
+                title=runbook_doc.name,
+                url=runbook_doc.file,
+            )
+        ]
+    if runbook_doc is not None:
+        expected_outcome = {
+            "expectation": (
+                f"A matching runbook was found for \"{runbook_doc.name}\"; if the "
+                "on-call engineer applies its recommended fix, the service should recover."
+            ),
+            "action": (
+                f'A matching runbook was found for "{runbook_doc.name}". '
+                f"Recommended (on-call): {runbook_doc.solution}"
+            ),
+        }
+    else:
+        expected_outcome = {
+            "expectation": (
+                f"If the runbook-recommended fix for '{root_cause.primary_cause.description}' "
+                "is applied by the on-call engineer, the service should recover."
+            ),
+            "action": (
+                f"Recommended (on-call): apply the runbook fix for "
+                f"'{root_cause.primary_cause.description}' and confirm recovery."
+            ),
+        }
+    recommended_actions = [expected_outcome["action"]]
+    for ref in runbook_references:
+        recommended_actions.append(f"Follow runbook: {ref.title} ({ref.url})")
+
     guardrail_findings = list(state.get("guardrail_findings", []))
     citation_result = validate_step_output(
         "rca_report",
@@ -274,19 +329,39 @@ def rca_report_service(state: dict[str, Any], deps: dict[str, Any]) -> dict[str,
         evidence=evidence,
         hypotheses=hypotheses,
         root_cause=root_cause,
+        recommended_actions=recommended_actions,
+        runbook_references=runbook_references,
         verification=VerificationResult(is_resolved=False, needs_reinvestigation=True),
     )
-    expected_outcome = {
-        "expectation": f"Incident resolved by addressing '{root_cause.primary_cause.description}'.",
-        "action": f"Apply the recommended fix for '{root_cause.primary_cause.description}' and confirm recovery.",
-    }
-    return {
+    update = {
         "root_cause": root_cause,
         "rca_confidence": root_cause.confidence_score,
         "incident_report": report,
         "expected_outcome": expected_outcome,
         "guardrail_findings": guardrail_findings,
     }
+    if runbook_doc is not None:
+        update["runbook_name"] = runbook_doc.name
+        update["runbook_solution"] = runbook_doc.solution
+    return update
+
+
+def _resolve_runbook_doc(incident) -> Any:
+    """Best-effort name-keyed runbook lookup (shared with the fallback RCA node).
+
+    Uses ``resolve_by_name`` to match the incident title/description against the
+    display name of ``runbooks/*.md`` files and return the doc's ``## Solution``.
+    Failures degrade to ``None`` so a broken lookup never fails the RCA step.
+    """
+    if incident is None:
+        return None
+    try:
+        from app.agents.investigation.runbook.resolver import resolve_by_name
+
+        return resolve_by_name(incident.title, incident.description)
+    except Exception:
+        logger.exception("[rca_report_service] name-keyed runbook resolution failed")
+        return None
 
 
 def _cited_evidence_ids(root_cause: RootCauseAnalysis) -> set[str]:

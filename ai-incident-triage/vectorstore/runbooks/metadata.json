@@ -10,7 +10,7 @@
   {
     "id": "knowledge_base/runbooks/runbook.md::1::Pod CrashLoopBackOff (OOMKilled)",
     "text": "## Pod CrashLoopBackOff (OOMKilled)\n\n**Alert:** Pod restart count > 5 within 10 minutes, termination reason\nOOMKilled\n**Severity:** High\n**Routing:** platformOnCall\n\n**Impact:**\n- Reduced service capacity\n- Potential request failures during restart windows\n\n**RCA Path:**\n1. `kubectl describe pod <pod>` — confirm OOMKilled as termination reason.\n2. Check memory usage trend over last 24h — gradual climb (leak) vs.\n   sudden spike (traffic burst).\n3. Cross-reference recent deployments.\n\n**Solution:**\n- Roll back to last known-good image if deployment-correlated.\n- If gradual leak: raise memory limit as temporary mitigation, file a\n  follow-up ticket for the leak itself.\n\n---",
-    "metadata": { 
+    "metadata": {
       "source_file": "knowledge_base/runbooks/runbook.md",
       "title": "Pod CrashLoopBackOff (OOMKilled)"
     }
@@ -33,10 +33,1114 @@
   },
   {
     "id": "knowledge_base/runbooks/runbook.md::4::Database Connection Pool Exhausted",
-    "text": "## Database Connection Pool Exhausted\n\n**Alert:** Database connection pool at 100% utilization, connection\nacquisition timeouts\n**Severity:** Critical\n**Routing:** prodCritical / databaseOnCall\n\n**Impact:**\n- Application threads block waiting for connections\n- Spikes in request latency and 5xx errors\n- Cascading service degradation as more services contend for connections\n\n**RCA Path:**\n1. Check connection-pool metrics (active/idle/waiting) on the affected\n   service.\n2. Look for connection leaks — unclosed connections in long-running\n   requests are a common cause.\n3. Correlate with any recent deployment or traffic spike.\n4. Check DB server limits and per-user max connections.\n\n**Solution:**\n- Restart/scale the affected application to release leaked connections.\n- If traffic burst: raise the pool max size if the database can sustain it.\n- If leaked connections persist: roll back the release that introduced the\n   leak and file a follow-up bug.\n- If DB server-level limit: tune max_connections and review per-service\n  allowances.",
+    "text": "## Database Connection Pool Exhausted\n\n**Alert:** Database connection pool at 100% utilization, connection\nacquisition timeouts\n**Severity:** Critical\n**Routing:** prodCritical / databaseOnCall\n\n**Impact:**\n- Application threads block waiting for connections\n- Spikes in request latency and 5xx errors\n- Cascading service degradation as more services contend for connections\n\n**RCA Path:**\n1. Check connection-pool metrics (active/idle/waiting) on the affected\n   service.\n2. Look for connection leaks — unclosed connections in long-running\n   requests are a common cause.\n3. Correlate with any recent deployment or traffic spike.\n4. Check DB server limits and per-user max connections.\n\n**Solution:**\n- Restart/scale the affected application to release leaked connections.\n- If traffic burst: raise the pool max size if the database can sustain it.\n- If leaked connections persist: roll back the release that introduced the\n   leak and file a follow-up bug.\n- If DB server-level limit: tune max_connections and review per-service\n  allowances.\n\n---",
     "metadata": {
       "source_file": "knowledge_base/runbooks/runbook.md",
       "title": "Database Connection Pool Exhausted"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-service--production.md::0::Symptoms",
+    "text": "## Symptoms\n\n- `checkout-service` logs show `hikari-pool-1 - Connection is not available, request timed out after Xms`\n- Customers receive \"unable to complete order\" errors during checkout\n- Database connection pool (HikariCP) metrics in monitoring dashboard report **100% utilization** (active + pending connections = maxPoolSize)\n- Connection acquisition attempts time out under sustained checkout load\n- Alert fires: \"Database connection pool at 100% utilization, connection acquisition timeouts\"",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-service--production.md",
+      "title": "Symptoms"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-service--production.md::1::Diagnosis Steps",
+    "text": "## Diagnosis Steps\n\n1. **Verify the alert:** Check monitoring dashboards for `checkout-db` connection pool metrics – confirm pool is at 100% and active connections are stuck.\n2. **Inspect active connections:** Run `SELECT * FROM pg_stat_activity` (or equivalent for your DB) to see long-running queries or idle-in-transaction connections.\n3. **Check application logs:** Look for stack traces or logs indicating slow queries, blocked transactions, or high concurrency.\n4. **Identify the bottleneck:** If queries are slow, examine `pg_stat_statements` or slow query logs. If queries are fast but pool is full, the issue is likely too many concurrent requests or a leak (connections not returned).\n5. **Correlate with load:** Review traffic spikes (e.g., from a promotion) that may have overwhelmed the pool despite sufficient database capacity.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-service--production.md",
+      "title": "Diagnosis Steps"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-service--production.md::2::Resolution",
+    "text": "## Resolution\n\nApply the following fix based on the root cause:\n\n1. **Increase connection pool size** (temporary workaround):  \n   - Update `spring.datasource.hikari.maximum-pool-size` in the application configuration.  \n   - This allows more concurrent connections but may shift the bottleneck to the database.  \n   - **Caution:** Ensure the database has enough `max_connections` to accommodate.\n\n2. **If the cause is slow queries or blocked transactions:**  \n   - Kill long-running or stuck queries: `SELECT pg_terminate_backend(pid)` for problematic PIDs.  \n   - Optimize or index the identified queries.  \n   - Scale the database (e.g., read replicas, increase CPU/memory).\n\n3. **If the cause is a connection leak:**  \n   - Check for unclosed `DataSource.getConnection()` calls or missing `finally` blocks.  \n   - Reduce `spring.datasource.hikari.idle-timeout` and `spring.datasource.hikari.max-lifetime` to recycle connections faster.\n\n4. **Long-term mitigation:**  \n   - Implement connection pooling monitoring and auto-scaling triggers.  \n   - Add rate limiting or queueing at the ingress layer to smooth load spikes.\n\nMonitor pool utilization and confirm recovery: pending connections drop to zero and active connections stay below the new limit.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-service--production.md",
+      "title": "Resolution"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-service--production.md::3::Observed Incident — 2026-08-31 — INC-006",
+    "text": "## Observed Incident — 2026-08-31 — INC-006\n\n**Severity:** P1  \n**Root Cause:** Database Connection Pool Exhausted – primary cause relates to pool saturation at 100% under sustained checkout load, leading to connection acquisition timeouts.  \n**Alert:** Database connection pool at 100% utilization, connection acquisition timeouts  \n**Severity:** Critical  \n**Routing:** prodCritical / databaseOnCall  \n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-service--production.md",
+      "title": "Observed Incident — 2026-08-31 — INC-006"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-service--production.md::4::Observed Incident — 2026-08-31 — INC-DB-",
+    "text": "## Observed Incident — 2026-08-31 — INC-DB-1001\n\n**Severity:** P1\n**Root Cause:** Primary cause relates to: ## Symptoms\n\n- `checkout-service` logs show `hikari-pool-1 - Connection is not available, request timed out after Xms`\n- Customers receive \"unable to complete order\" errors during checkout\n- Database \n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-service--production.md",
+      "title": "Observed Incident — 2026-08-31 — INC-DB-1001"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-service--production.md::5::Observed Incident — 2026-08-31 — INC-DB-",
+    "text": "## Observed Incident — 2026-08-31 — INC-DB-1001\n\n**Severity:** P1\n**Root Cause:** Primary cause relates to: ## Symptoms\n\n- `checkout-service` logs show `hikari-pool-1 - Connection is not available, request timed out after Xms`\n- Customers receive \"unable to complete order\" errors during checkout\n- Database \n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-service--production.md",
+      "title": "Observed Incident — 2026-08-31 — INC-DB-1001"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-service--production.md::6::Observed Incident — 2026-08-31 — INC-006",
+    "text": "## Observed Incident — 2026-08-31 — INC-006\n\n**Severity:** P2\n**Root Cause:** Primary cause relates to: ## Symptoms\n\n- `checkout-service` logs show `hikari-pool-1 - Connection is not available, request timed out after Xms`\n- Customers receive \"unable to complete order\" errors during checkout\n- Database \n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-service--production.md",
+      "title": "Observed Incident — 2026-08-31 — INC-006"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-service--production.md::7::Observed Incident — 2026-08-31 — INC-DB-",
+    "text": "## Observed Incident — 2026-08-31 — INC-DB-1001\n\n**Severity:** P1\n**Root Cause:** Primary cause relates to: ## Symptoms\n\n- `checkout-service` logs show `hikari-pool-1 - Connection is not available, request timed out after Xms`\n- Customers receive \"unable to complete order\" errors during checkout\n- Database \n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-service--production.md",
+      "title": "Observed Incident — 2026-08-31 — INC-DB-1001"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/performance--product-catalog--production.md::0::Symptoms",
+    "text": "## Symptoms\n\n- Customers intermittently receive HTTP 503 \"Service Unavailable\" pages on the web storefront.\n- API gateway returns 503 for approximately 1 in 6 requests to the product-catalog service.\n- Correlated with slow upstream response times from product-catalog and high JVM heap saturation.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/performance--product-catalog--production.md",
+      "title": "Symptoms"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/performance--product-catalog--production.md::1::Diagnosis Steps",
+    "text": "## Diagnosis Steps\n\n1. Check API gateway logs for 503 response patterns and correlation with product-catalog response times.\n2. Examine product-catalog service metrics (CPU, memory, JVM heap usage, request latency, error rate).\n3. Investigate JVM heap dumps or GC logs for memory leaks, excessive GC pauses, or full GC events.\n4. Review upstream dependency health (database, caching, other services) for slow or failing responses.\n5. Look for recent deployments, configuration changes, or traffic spikes that may have triggered the issue.\n6. If heap saturation is confirmed, analyze heap usage to identify potential memory leaks or high object allocation.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/performance--product-catalog--production.md",
+      "title": "Diagnosis Steps"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/performance--product-catalog--production.md::2::Resolution",
+    "text": "## Resolution\n\n1. **If heap saturation is caused by memory leak:** Restart the service and roll back any recent code changes. Then investigate and fix the leak in a non-production environment.\n2. **If heap saturation is due to increased traffic:** Scale up the product-catalog service (increase JVM heap size, add more instances) or implement a circuit breaker to protect downstream callers.\n3. **If slow upstream responses are the root cause:** Optimize slow queries, increase upstream capacity, or add caching. Consider timeouts and retry policies.\n4. After applying the fix, monitor the service for 5-10 minutes to confirm error rate drops below 5% and heap usage stabilizes.\n5. If the fix is not effective, escalate to the owning team for further investigation.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/performance--product-catalog--production.md",
+      "title": "Resolution"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/performance--product-catalog--production.md::3::Observed Incident — 2026-08-31 — INC-PER",
+    "text": "## Observed Incident — 2026-08-31 — INC-PERF-3077\n\n**Severity:** P2\n**Root Cause:** Primary cause relates to: ## HTTP 503 Service Unavailable\n\n**Alert:** HTTP 503 responses exceeding 5% of request volume for 5 minutes\n**Severity:** High\n**Routing:** prodCritical\n\n**Impact:**\n- Downstream callers receive servi\n\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.75 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/performance--product-catalog--production.md",
+      "title": "Observed Incident — 2026-08-31 — INC-PERF-3077"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/runbook.md::5::Third-Party API Timeout",
+    "text": "## Third-Party API Timeout\n\n**Alert:** External dependency error rate > 20% or egress p95 latency > 5s\nsustained for 5 minutes\n**Severity:** High\n**Routing:** prodCritical\n\n**Impact:**\n- Customer-facing transactions that depend on the third party fail or stall\n- Retry storms amplify latency onto adjacent services\n\n**RCA Path:**\n1. Check outbound-call logs for the failing provider — distinguish timeouts\n   vs. HTTP 5xx from the provider.\n2. Confirm the provider status page / feed reports degradation.\n3. Review circuit-breaker state transitions (OPEN/HALF_OPEN/CLOSED) for the\n   dependency.\n4. Verify no correlated local deployment — absence keeps blame external.\n\n**Solution:**\n- Keep the circuit breaker OPEN and serve fallback/queued processing until\n  the provider recovers; escalate to the vendor if prolonged.\n- After recovery, drain any deferred-work queues and reconcile in-flight\n  transactions.\n\n---",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/runbook.md",
+      "title": "Third-Party API Timeout"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/runbook.md::6::Deployment Regression",
+    "text": "## Deployment Regression\n\n**Alert:** New error class appearing within 15 minutes of a deployment, or\nerror rate jumping > 5x baseline post-rollout\n**Severity:** Critical\n**Routing:** prodCritical\n\n**Impact:**\n- Immediate user-facing errors on affected endpoints\n- Possible readiness-probe failures reducing serving capacity\n\n**RCA Path:**\n1. Compare deployment events with first occurrence of the new error type.\n2. Confirm the error class was absent before the rollout window.\n3. Check metrics for the post-deploy error-rate step change.\n4. Roll forward only if the fix is trivial; otherwise roll back.\n\n**Solution:**\n- Roll back to the previous known-good version immediately.\n- File a follow-up bug with the stack traces captured during the window;\n  re-release only after reproducing and fixing the failure.\n\n---",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/runbook.md",
+      "title": "Deployment Regression"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/runbook.md::7::Service Availability Degradation (Traffi",
+    "text": "## Service Availability Degradation (Traffic Spike)\n\n**Alert:** Synthetic availability < 100% for a public endpoint, or request\nrate > 3x the 7-day baseline with rising latency\n**Severity:** Critical\n**Routing:** prodCritical\n\n**Impact:**\n- Users see slow or failed page loads (503/504s)\n- Availability SLO burn; potential revenue loss during campaigns\n- Readiness-probe failures further reduce serving capacity\n\n**RCA Path:**\n1. Confirm the traffic-shape change: compare current request rate against the\n   7-day baseline and check for campaign/marketplace events.\n2. Check HPA behavior: desired vs. current replicas, stabilization windows,\n   and how far scaling lagged behind demand.\n3. Check saturation signals: CPU utilization, connect-queue depth, connection\n   pools, and p99 latency trend.\n4. Correlate readiness/liveness probe failures with the load peak.\n5. Verify no concurrent deployment or configuration change coincided.\n\n**Solution (recommendations — the on-call engineer applies the fix):**\n- Scale up replicas manually to absorb the spike while the HPA catches up\n  (or lower the HPA stabilization window / raise maxReplicas).\n- Restart pods that are wedged by probe failures once capacity is in place.\n- Add/verify upstream timeouts and load-shedding limits so queues drain\n  instead of saturating.\n- After the event, re-tune HPA parameters so reaction time matches the\n  traffic-ramp shape.\n\n---",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/runbook.md",
+      "title": "Service Availability Degradation (Traffic Spike)"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/runbook.md::8::Container High Memory Usage",
+    "text": "## Container High Memory Usage\n\n**Alert:** Container memory usage within 5% of its limit, or headroom ≈ 0%\nfor more than 5 minutes\n**Severity:** High\n**Routing:** platformOnCall\n\n**Impact:**\n- Heavy GC pressure: latency spikes and slow probes\n- One allocation burst away from an OOMKill\n- Thread-pool saturation and request backlogs while GC dominates\n\n**RCA Path:**\n1. Confirm usage vs. limit from container metrics (working set vs. limit).\n2. Check the GC log pattern: frequency and pause times of full GCs, and\n   whether heap stays high after collection (live set) or drops (burst).\n3. Correlate with recent changes: cache size increases, new features, or\n   traffic bursts that raised live-set size.\n4. Take a heap profile/dump if the app is still responsive.\n\n**Solution (recommendations — the on-call engineer applies the fix):**\n- Increase the memory limit to give real headroom: rule of thumb is 20–30%\n  above steady-state usage. For example, if the app genuinely needs ~1 GB at\n  steady state:\n  ```yaml\n  resources:\n    requests:\n      memory: \"1Gi\"\n    limits:\n      memory: \"1.5Gi\"   # or \"2Gi\" depending on spike behavior\n  ```\n- Review the in-process cache sizing that drove the growth; reduce entries or\n  move it behind an eviction budget that respects the new limit.\n- Tune GC (heap fractions) only after the limit is corrected.\n\n---",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/runbook.md",
+      "title": "Container High Memory Usage"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/runbook.md::9::Downstream API Rate Limiting (HTTP 429)",
+    "text": "## Downstream API Rate Limiting (HTTP 429)\n\n**Alert:** Sustained 429 responses from a downstream/third-party API, or 5xx\nrate on the owning service > 5% correlated with 429s\n**Severity:** High\n**Routing:** prodCritical / integrationOnCall\n\n**Impact:**\n- Calling service surfaces cascading 5xx errors to its callers\n- Background sync/queue processing falls behind (lag grows)\n- Retry storms amplify load on both sides\n\n**RCA Path:**\n1. Confirm the 429 source: check response headers (quota, reset window) from\n   the downstream API and whether a quota change occurred.\n2. Measure retry amplification: attempts per failed request and the effective\n   backoff policy in force.\n3. Check circuit-breaker state transitions and whether half-open probes are\n   re-opening immediately.\n4. Correlate 5xx rate and queue/sync lag with the 429 onset time.\n\n**Solution (recommendations — the on-call engineer applies the fix):**\n- Throttle request rate to the vendor's granted quota (client-side rate\n  limiter / token bucket) instead of retrying into a hard limit.\n- Add exponential backoff with jitter and honor the vendor's reset window;\n  cap attempts so retries cannot amplify load.\n- Keep the circuit breaker OPEN for the reset window and queue/defer work\n  rather than failing fast into 5xx.\n- Engage the vendor to raise the quota or get a per-client allowance.\n\n---",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/runbook.md",
+      "title": "Downstream API Rate Limiting (HTTP 429)"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/runbook.md::10::DNS Resolution Failures",
+    "text": "## DNS Resolution Failures\n\n**Alert:** Rising DNS SERVFAIL/NXDOMAIN/timeout rate from a service's\nresolver, or intermittent connection timeouts to in-cluster hostnames\n**Severity:** High\n**Routing:** platformOnCall\n\n**Impact:**\n- A fraction of requests stall and time out while resolution retries run\n- Elevated p99 latency and 504s despite healthy CPU/memory\n- Reconnect storms can add load to CoreDNS\n\n**RCA Path:**\n1. Confirm the failure mode is resolution (NXDOMAIN/SERVFAIL/timeouts), not\n   connection refusal — check resolver logs and app UnknownHostException /\n   i/o timeout patterns.\n2. Check CoreDNS pod health, restarts, and upstream probe failures in the\n   affected window.\n3. Verify the target Service/endpoints still exist (a deleted Service\n   produces clean NXDOMAIN; a degraded resolver produces timeouts).\n4. Rule out resource exhaustion on the calling service (this failure mode\n   shows nominal CPU/memory).\n5. Correlate latency spikes with DNS failure bursts.\n\n**Solution (recommendations — the on-call engineer applies the fix):**\n- Restore/roll CoreDNS to a healthy state (restart the degraded pods, verify\n  upstream connectivity) before touching the calling service.\n- Add client-side resolver caching / negative-TTL tuning and connection\n  reuse so each request does not re-resolve.\n- Add retry with backoff around DNS-dependent connects; make timeouts\n  explicit so callers fail fast instead of hanging.\n- If a Service was deleted or renamed, restore the Service/endpoints.\n\n---",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/runbook.md",
+      "title": "DNS Resolution Failures"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/runbook.md::11::Persistent Volume Disk Exhaustion",
+    "text": "## Persistent Volume Disk Exhaustion\n\n**Alert:** PVC utilization > 90% (warning) or 100% with write failures\n(critical)\n**Severity:** Critical\n**Routing:** dbaOnCall / platformOnCall\n\n**Impact:**\n- Database/ingest writes fail (No space left on device); WAL/checkpoints\n  fail and the instance may go read-only to protect consistency\n- Autovacuum/maintenance fails; queues build up behind the writes\n\n**RCA Path:**\n1. Confirm which filesystem/PVC is full and what consumed it: data growth,\n   WAL accumulation, or a failed retention/cleanup job.\n2. Check whether cleanup/retention jobs have been failing and since when.\n3. Correlate ingest rate increases with the growth curve.\n4. Verify the volume's size class and whether expansion is possible online.\n\n**Solution (recommendations — the on-call engineer applies the fix):**\n- Free space immediately and safely: complete/repair the retention cleanup,\n  archive and remove old WAL segments only after a verified backup/checkpoint.\n- Expand the persistent volume (or migrate to a larger volume class) to\n  restore headroom — target < 70% steady-state utilization.\n- Fix the failing cleanup job and add an alert at 80% utilization so this is\n  caught before write failures begin.\n\n---",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/runbook.md",
+      "title": "Persistent Volume Disk Exhaustion"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/runbook.md::12::Cache Stampede After Redis Restart",
+    "text": "## Cache Stampede After Redis Restart\n\n**Alert:** Cache hit rate collapses (< 20% of baseline) right after a Redis\nrestart/eviction, with origin DB CPU/connection saturation\n**Severity:** High\n**Routing:** prodCritical / dbaOnCall\n\n**Impact:**\n- Origin database receives the full read path load simultaneously\n- Connection pools exhaust; read latency and error rates spike\n- Replication lag grows while the origin is saturated\n\n**RCA Path:**\n1. Confirm the cache event: restart/eviction time and whether the cache came\n   back empty (no AOF/RDB restore, eviction policy flush).\n2. Verify the load spike start time is immediately after the cache event and\n   that miss rate went to ~100% — correlation in the logs is the signature.\n3. Check origin connection pools, CPU, and whether identical queries run\n   concurrently without coalescing.\n4. Rule out organic traffic growth (compare request rate to baseline).\n\n**Solution (recommendations — the on-call engineer applies the fix):**\n- Warm the cache before restoring full read traffic (controlled warming or\n  gradual traffic ramp).\n- Add request coalescing (single-flight) so concurrent identical misses\n  trigger one origin query, and TTL jitter so keys do not expire together.\n- Configure the cache for durability across restarts (AOF/RDB restore) where\n  the data shape allows it.\n- Consider short-lived stale-serve (serve slightly stale values while one\n  refresh runs) as stampede protection.\n\n---",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/runbook.md",
+      "title": "Cache Stampede After Redis Restart"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/runbook.md::13::Pod CrashLoopBackOff (Configuration Erro",
+    "text": "## Pod CrashLoopBackOff (Configuration Error)\n\n**Alert:** Pod restart count > 5 within 10 minutes with exitCode=1 (application\nstartup failure), shortly after a config/secret/ConfigMap change\n**Severity:** Critical\n**Routing:** platformOnCall\n\n**Impact:**\n- Zero or reduced serving capacity for the affected service\n- Request failures cluster-wide while no pod becomes healthy\n\n**RCA Path:**\n1. `kubectl describe pod <pod>` — check container exitCode and the last\n   restart timing against the most recent config/secret deployment.\n2. Read the pod's startup logs: missing file paths, unresolved placeholders,\n   or invalid configuration values identify the broken reference.\n3. Diff the ConfigMap/Secret/Helm values against the last known-good revision\n   (mounted paths, key names, required fields).\n4. Confirm the application's expected mount path versus what the new config\n   actually mounts.\n\n**Solution (recommendations — the on-call engineer applies the fix):**\n- Roll back the ConfigMap/Secret/Helm change to the last known-good revision\n  (or restore the expected mount path/key names) so pods can start.\n- Verify all pods reach Ready before re-attempting the config change with the\n  corrected values.\n- Add a pre-deploy validation step (config render + schema check) so a broken\n  reference cannot reach the cluster again.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/runbook.md",
+      "title": "Pod CrashLoopBackOff (Configuration Error)"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/runbook.md::14::Observed Incident — 2026-08-31 — INC-K8S",
+    "text": "## Observed Incident — 2026-08-31 — INC-K8S-2091\n\n**Severity:** P1\n**Root Cause:** Primary cause relates to: ## ImagePullBackOff\n\n**Alert:** Pod stuck in ImagePullBackOff — image cannot be pulled\n**Severity:** Medium\n**Routing:** platformOnCall\n\n**Impact:**\n- New pods fail to start, capacity drops\n- Deployme\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/runbook.md",
+      "title": "Observed Incident — 2026-08-31 — INC-K8S-2091"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/third-party--payment-service--production.md::0::Symptoms",
+    "text": "## Symptoms\n\n- Payment service HTTP 503 responses exceed 5% of total request volume.\n- Elevated timeout and 5xx errors from the external payment gateway (`payment-gateway-external`).\n- Payment service retry counters spike and circuit-breaker state transitions (open/closed) are observed.\n- Deferred charges may accumulate pending provider recovery.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/third-party--payment-service--production.md",
+      "title": "Symptoms"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/third-party--payment-service--production.md::1::Diagnosis Steps",
+    "text": "## Diagnosis Steps\n\n1. Check the payment-service error rate dashboard for HTTP 503 percentage.\n2. Validate the circuit-breaker state for `payment-gateway-external` using the service’s health endpoint or metrics.\n3. Review upstream provider status (e.g., status page or direct monitoring) to confirm if the outage is external.\n4. Correlate the timing of circuit-breaker transitions with the spike in timeouts/5xx.\n5. Examine payment-service logs for `payment-gateway-external` response times and retry count.\n6. If the provider reports recovery, verify that the circuit-breaker transitions to half-open or closed and new requests succeed.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/third-party--payment-service--production.md",
+      "title": "Diagnosis Steps"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/third-party--payment-service--production.md::2::Resolution",
+    "text": "## Resolution\n\n- If the external provider is degraded:\n  - Wait for provider recovery (passive).\n  - Optionally, switch to a fallback gateway if configured.\n  - Increase the circuit-breaker threshold or retry count only if safe and approved.\n- If the provider has recovered but the circuit-breaker remains open:\n  - Manually reset the circuit-breaker via admin endpoint.\n  - Monitor initial requests for success.\n- For deferred charges:\n  - Trigger a batch settlement job once the gateway is healthy.\n- Verify normal charge processing resumes and error rate drops below 5%.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/third-party--payment-service--production.md",
+      "title": "Resolution"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/third-party--payment-service--production.md::3::Observed Incident — 2026-08-31 — INC-004",
+    "text": "## Observed Incident — 2026-08-31 — INC-004\n\n**Severity:** P1\n**Root Cause:** Primary cause relates to: ## Observed Incident — 2026-08-31 — INC-PERF-3077\n\n**Severity:** P2\n**Root Cause:** Primary cause relates to: ## HTTP 503 Service Unavailable\n\n**Alert:** HTTP 503 responses exceeding 5% of request vol\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/third-party--payment-service--production.md",
+      "title": "Observed Incident — 2026-08-31 — INC-004"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/runbook.md::15::Observed Incident — 2026-08-31 — INC-005",
+    "text": "## Observed Incident — 2026-08-31 — INC-005\n\n**Severity:** P2\n**Root Cause:** Primary cause relates to: ## Pod CrashLoopBackOff (Configuration Error)\n\n**Alert:** Pod restart count > 5 within 10 minutes with exitCode=1 (application\nstartup failure), shortly after a config/secret/ConfigMap change\n**Severi\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/runbook.md",
+      "title": "Observed Incident — 2026-08-31 — INC-005"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/runbook.md::16::Observed Incident — 2026-08-31 — INC-K8S",
+    "text": "## Observed Incident — 2026-08-31 — INC-K8S-2001\n\n**Severity:** P3\n**Root Cause:** Primary cause relates to: ## ImagePullBackOff\n\n**Alert:** Pod stuck in ImagePullBackOff — image cannot be pulled\n**Severity:** Medium\n**Routing:** platformOnCall\n\n**Impact:**\n- New pods fail to start, capacity drops\n- Deployme\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.75 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/runbook.md",
+      "title": "Observed Incident — 2026-08-31 — INC-K8S-2001"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/performance--product-catalog--production.md::4::Observed Incident — 2026-08-31 — INC-PER",
+    "text": "## Observed Incident — 2026-08-31 — INC-PERF-3077\n\n**Severity:** P2\n**Root Cause:** ## Diagnosis Steps\n\n1. Check API gateway logs for 503 response patterns and correlation with product-catalog response times.\n2. Examine product-catalog service metrics (CPU, memory, JVM heap usage, request latency, error rate).\n3. Investigate JVM heap dumps or GC logs for memory leaks, excessive GC pauses, or full GC events.\n4. Review upstream dependency health (database, caching, other services) for slow or failing responses.\n5. Look for recent deployments, configuration changes, or traffic spikes that may have triggered the issue.\n6. If heap saturation is confirmed, analyze heap usage to identify potential memory leaks or high object allocation.\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.8153234720230103 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/performance--product-catalog--production.md",
+      "title": "Observed Incident — 2026-08-31 — INC-PERF-3077"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-db--production.md::0::Symptoms",
+    "text": "## Symptoms\n\n- Customers on the checkout page see intermittent \"unable to complete order\" errors\n- Application logs show the checkout service repeatedly failing to acquire a connection from the primary database pool\n- Traffic spike is observed on the checkout-db instance\n- Error rate increases on checkout endpoints, correlating with connection acquisition timeouts",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-db--production.md",
+      "title": "Symptoms"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-db--production.md::1::Diagnosis Steps",
+    "text": "## Diagnosis Steps\n\n1. **Confirm the connection pool is exhausted** — Query the database for current active connections:\n   ```sql\n   SELECT count(*) FROM pg_stat_activity WHERE state = 'active';\n   ```\n   Compare against the configured `max_connections` (typically 100-200 for the checkout pool).\n\n2. **Identify which queries are consuming connections** — Find long-running or idle-in-transaction queries:\n   ```sql\n   SELECT pid, now() - pg_stat_activity.query_start AS duration, query, state\n   FROM pg_stat_activity\n   WHERE (state = 'active' OR state = 'idle in transaction')\n   ORDER BY duration DESC;\n   ```\n\n3. **Check for blocking sessions** — Look for locks that may be holding connections open:\n   ```sql\n   SELECT blocked_locks.pid AS blocked_pid,\n          blocking_locks.pid AS blocking_pid\n   FROM pg_locks blocked_locks\n   JOIN pg_locks blocking_locks ON blocked_locks.locktype = blocking_locks.locktype AND blocked_locks.database = blocking_locks.database\n   WHERE NOT blocked_locks.granted;\n   ```\n\n4. **Review application logs** — Look for connection pool timeout errors and correlated SQL execution logs:\n   - `grep \"could not acquire connection\" /var/log/checkout-service/checkout.log`\n\n5. **Examine application connection pool metrics** — Check HikariCP or similar pool metrics for usage:\n   - `active`, `idle`, `pending`, and `max` connection counts.\n\n6. **Check database resource usage** — CPU, memory, and disk I/O spikes may indicate a slower database causing connections to pile up:\n   - Use `top`, `iostat`, or cloud monitoring tools.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-db--production.md",
+      "title": "Diagnosis Steps"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-db--production.md::2::Resolution",
+    "text": "## Resolution\n\n1. **Immediate mitigation** — If the pool is fully exhausted and traffic is high, scale the connection pool up temporarily:\n   - Increase `max_connections` in the database config (e.g., from 100 to 200)\n   - Restart the checkout service to apply new pool settings\n   - **Caution:** Ensure the database server has enough RAM to handle additional connections.\n\n2. **Identify and resolve problematic queries or transactions** — If long-running or blocking queries are found:\n   - Cancel the offending query: `SELECT pg_cancel_backend(<pid>);`\n   - If it's idle-in-transaction, terminate the session: `SELECT pg_terminate_backend(<pid>);`\n\n3. **Prevent recurrence** — After the immediate issue is resolved:\n   - Investigate what caused the traffic spike (e.g., flash sale, retry storm, DDoS)\n   - Consider implementing connection pool monitoring and auto-scaling\n   - Add query timeout to prevent long-running queries from holding connections\n   - Review application code for unclosed connections or transaction leaks\n\n4. **Recovery verification** — After applying the fix:\n   - Confirm the database connection pool utilization drops below 80%\n   - Verify checkout service successfully acquires connections and errors stop\n   - Monitor for 5-10 minutes to ensure stability",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-db--production.md",
+      "title": "Resolution"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-db--production.md::3::Observed Incident — 2026-08-31 — INC-DB-",
+    "text": "## Observed Incident — 2026-08-31 — INC-DB-1001\n\n**Severity:** P1\n**Root Cause:** No hypotheses produced; cause could not be determined during investigation.\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.5 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-db--production.md",
+      "title": "Observed Incident — 2026-08-31 — INC-DB-1001"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-service--production.md::8::Observed Incident — 2026-08-31 — INC-DB-",
+    "text": "## Observed Incident — 2026-08-31 — INC-DB-1001\n\n**Severity:** P1\n**Root Cause:** Primary cause relates to: ## Symptoms\n\n- `checkout-service` logs show `hikari-pool-1 - Connection is not available, request timed out after Xms`\n- Customers receive \"unable to complete order\" errors during checkout\n- Database \n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-service--production.md",
+      "title": "Observed Incident — 2026-08-31 — INC-DB-1001"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/runbook.md::17::Observed Incident — 2026-08-31 — INC-K8S",
+    "text": "## Observed Incident — 2026-08-31 — INC-K8S-2001\n\n**Severity:** P3\n**Root Cause:** Primary cause relates to: ## ImagePullBackOff\n\n**Alert:** Pod stuck in ImagePullBackOff — image cannot be pulled\n**Severity:** Medium\n**Routing:** platformOnCall\n\n**Impact:**\n- New pods fail to start, capacity drops\n- Deployme\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.75 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/runbook.md",
+      "title": "Observed Incident — 2026-08-31 — INC-K8S-2001"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-service--production.md::9::Observed Incident — 2026-09-02 — INC-DB-",
+    "text": "## Observed Incident — 2026-09-02 — INC-DB-1001\n\n**Severity:** P1\n**Root Cause:** Primary cause relates to: ## Symptoms\n\n- `checkout-service` logs show `hikari-pool-1 - Connection is not available, request timed out after Xms`\n- Customers receive \"unable to complete order\" errors during checkout\n- Database \n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-service--production.md",
+      "title": "Observed Incident — 2026-09-02 — INC-DB-1001"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-service--production.md::10::Observed Incident — 2026-09-02 — INC-DB-",
+    "text": "## Observed Incident — 2026-09-02 — INC-DB-1001\n\n**Severity:** P1\n**Root Cause:** Primary cause relates to: ## Symptoms\n\n- `checkout-service` logs show `hikari-pool-1 - Connection is not available, request timed out after Xms`\n- Customers receive \"unable to complete order\" errors during checkout\n- Database \n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-service--production.md",
+      "title": "Observed Incident — 2026-09-02 — INC-DB-1001"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-service--production.md::11::Observed Incident — 2026-09-02 — INC-006",
+    "text": "## Observed Incident — 2026-09-02 — INC-006\n\n**Severity:** P2\n**Root Cause:** Primary cause relates to: ## Symptoms\n\n- `checkout-service` logs show `hikari-pool-1 - Connection is not available, request timed out after Xms`\n- Customers receive \"unable to complete order\" errors during checkout\n- Database \n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-service--production.md",
+      "title": "Observed Incident — 2026-09-02 — INC-006"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/runbook.md::18::Observed Incident — 2026-09-02 — INC-010",
+    "text": "## Observed Incident — 2026-09-02 — INC-010\n\n**Severity:** P1\n**Root Cause:** Primary cause relates to: ## Pod CrashLoopBackOff (OOMKilled)\n\n**Alert:** Pod restart count > 5 within 10 minutes, termination reason\nOOMKilled\n**Severity:** High\n**Routing:** platformOnCall\n\n**Impact:**\n- Reduced service capa\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.75 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/runbook.md",
+      "title": "Observed Incident — 2026-09-02 — INC-010"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-service--production.md::12::Observed Incident — 2026-09-02 — INC-DB-",
+    "text": "## Observed Incident — 2026-09-02 — INC-DB-1001\n\n**Severity:** P1\n**Root Cause:** Primary cause relates to: ## Symptoms\n\n- `checkout-service` logs show `hikari-pool-1 - Connection is not available, request timed out after Xms`\n- Customers receive \"unable to complete order\" errors during checkout\n- Database \n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-service--production.md",
+      "title": "Observed Incident — 2026-09-02 — INC-DB-1001"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/performance--product-catalog--production.md::5::Observed Incident — 2026-09-02 — INC-PER",
+    "text": "## Observed Incident — 2026-09-02 — INC-PERF-3077\n\n**Severity:** P2\n**Root Cause:** ## Observed Incident — 2026-08-31 — INC-PERF-3077\n\n**Severity:** P2\n**Root Cause:** ## Diagnosis Steps\n\n1. Check API gateway logs for 503 response patterns and correlation with product-catalog response times.\n2. Examine product-catalog service metrics (CPU, memory, JVM heap usage, request latency, error rate).\n3. Investigate JVM heap dumps or GC logs for memory leaks, excessive GC pauses, or full GC events.\n4. Review upstream dependency health (database, caching, other services) for slow or failing responses.\n5. Look for recent deployments, configuration changes, or traffic spikes that may have triggered the issue.\n6. If heap saturation is confirmed, analyze heap usage to identify potential memory leaks or high object allocation.\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.8153234720230103 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.8209024667739868 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/performance--product-catalog--production.md",
+      "title": "Observed Incident — 2026-09-02 — INC-PERF-3077"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/runbook.md::19::Observed Incident — 2026-09-02 — INC-K8S",
+    "text": "## Observed Incident — 2026-09-02 — INC-K8S-2091\n\n**Severity:** P1\n**Root Cause:** Primary cause relates to: ## Pod CrashLoopBackOff (Configuration Error)\n\n**Alert:** Pod restart count > 5 within 10 minutes with exitCode=1 (application\nstartup failure), shortly after a config/secret/ConfigMap change\n**Severi\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/runbook.md",
+      "title": "Observed Incident — 2026-09-02 — INC-K8S-2091"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/third-party--payment-service--production-2.md::0::Symptoms",
+    "text": "## Symptoms\n\n- Payment service HTTP 503 responses exceed 5% of total request volume.\n- Elevated timeout and 5xx errors from the external payment gateway (`payment-gateway-external`).\n- Payment service retry counters and circuit-breaker state transitions are triggered.\n- Customers may experience failed or delayed payment transactions.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/third-party--payment-service--production-2.md",
+      "title": "Symptoms"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/third-party--payment-service--production-2.md::1::Diagnosis Steps",
+    "text": "## Diagnosis Steps\n\n1. Check the payment-service’s circuit-breaker status:  \n   Retrieve the metrics endpoint (e.g., `/actuator/health` or `/metrics`) for `resilience4j.circuitbreaker.state` for the `payment-gateway-external` circuit breaker. A state of `OPEN` or `HALF_OPEN` indicates the gateway is degraded.\n\n2. Inspect recent logs from payment-service for retry exhaustion and timeout exceptions:  \n   Look for entries containing `RetryableException`, `TimeoutException`, or `CircuitBreakerRecordError`. Filter on `payment-gateway-external` and the last 15 minutes.\n\n3. Verify third-party gateway health:  \n   Use the provider’s status page or perform a synthetic health check (e.g., `curl -v --connect-timeout 5 https://payment-gateway-external/health`). If the gateway returns 5xx or times out, the issue is external.\n\n4. Confirm that the upstream provider has resolved the issue:  \n   Wait for a reduction in timeout errors from the gateway, or check incident communications from the provider. The service’s circuit breaker will transition to `HALF_OPEN` and eventually `CLOSED` after successful probes.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/third-party--payment-service--production-2.md",
+      "title": "Diagnosis Steps"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/third-party--payment-service--production-2.md::2::Resolution",
+    "text": "## Resolution\n\n1. **If the external gateway is still degraded:**  \n   - No immediate fix possible from the application side.  \n   - Monitor the provider’s status and let the circuit breaker handle load shedding automatically.  \n   - Consider manual override only if critical business logic requires bypassing the circuit breaker (not recommended).\n\n2. **If the gateway has recovered but the circuit breaker remains OPEN:**  \n   - The circuit breaker will automatically attempt a transition to `HALF_OPEN` after the configured wait duration (default 60 seconds).  \n   - To force a reset, restart the payment-service pods (e.g., `kubectl rollout restart deployment/payment-service -n payments`).  \n   - Alternatively, clear the circuit breaker state via the Actuator endpoint:  \n     `POST /actuator/circuitbreakers?state=CLOSED` (requires appropriate security permissions).\n\n3. **After recovery:**  \n   - Verify that HTTP 503 rates drop below 1% and circuit breaker state returns to `CLOSED`.  \n   - Confirm deferred charges are settled by the provider (check payment reconciliation logs).  \n   - Update the runbook if any manual steps were required.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/third-party--payment-service--production-2.md",
+      "title": "Resolution"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/third-party--payment-service--production-2.md::3::Observed Incident — 2026-09-02 — INC-004",
+    "text": "## Observed Incident — 2026-09-02 — INC-004\n\n**Severity:** P1  \n**Root Cause:** Primary cause relates to:\n\n- Payment service HTTP 503 responses exceed 5% of total request volume.\n- Elevated timeout and 5xx errors from the external payment gateway (`payment-gateway-external`).\n- Payment service\n\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/third-party--payment-service--production-2.md",
+      "title": "Observed Incident — 2026-09-02 — INC-004"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/runbook.md::20::Observed Incident — 2026-09-02 — INC-005",
+    "text": "## Observed Incident — 2026-09-02 — INC-005\n\n**Severity:** P2\n**Root Cause:** Primary cause relates to: ## Pod CrashLoopBackOff (Configuration Error)\n\n**Alert:** Pod restart count > 5 within 10 minutes with exitCode=1 (application\nstartup failure), shortly after a config/secret/ConfigMap change\n**Severi\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/runbook.md",
+      "title": "Observed Incident — 2026-09-02 — INC-005"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/runbook.md::21::Observed Incident — 2026-09-02 — INC-K8S",
+    "text": "## Observed Incident — 2026-09-02 — INC-K8S-2001\n\n**Severity:** P3\n**Root Cause:** Primary cause relates to: ## ImagePullBackOff\n\n**Alert:** Pod stuck in ImagePullBackOff — image cannot be pulled\n**Severity:** Medium\n**Routing:** platformOnCall\n\n**Impact:**\n- New pods fail to start, capacity drops\n- Deployme\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.75 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/runbook.md",
+      "title": "Observed Incident — 2026-09-02 — INC-K8S-2001"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/performance--product-catalog--production.md::6::Observed Incident — 2026-09-02 — INC-PER",
+    "text": "## Observed Incident — 2026-09-02 — INC-PERF-3077\n\n**Severity:** P2\n**Root Cause:** ## Observed Incident — 2026-08-31 — INC-PERF-3077\n\n**Severity:** P2\n**Root Cause:** ## Diagnosis Steps\n\n1. Check API gateway logs for 503 response patterns and correlation with product-catalog response times.\n2. Examine product-catalog service metrics (CPU, memory, JVM heap usage, request latency, error rate).\n3. Investigate JVM heap dumps or GC logs for memory leaks, excessive GC pauses, or full GC events.\n4. Review upstream dependency health (database, caching, other services) for slow or failing responses.\n5. Look for recent deployments, configuration changes, or traffic spikes that may have triggered the issue.\n6. If heap saturation is confirmed, analyze heap usage to identify potential memory leaks or high object allocation.\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.8153234720230103 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.8209024667739868 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/performance--product-catalog--production.md",
+      "title": "Observed Incident — 2026-09-02 — INC-PERF-3077"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-db--production-2.md::0::Symptoms",
+    "text": "## Symptoms\n\n- Customers on the checkout page see intermittent \"unable to complete order\" errors.\n- Application logs from the checkout service show repeated \"failed to acquire connection from pool\" errors against the primary database (`checkout-db`).\n- The issue correlates with a traffic spike.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-db--production-2.md",
+      "title": "Symptoms"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-db--production-2.md::1::Diagnosis Steps",
+    "text": "## Diagnosis Steps\n\n1. Confirm the alert: Log into the monitoring dashboard and verify the `checkout-db` connection pool utilization metric is at or near 100%.\n2. Check the database server's current number of active connections (e.g., `SELECT count(*) FROM pg_stat_activity` on PostgreSQL) and compare it against the configured `max_connections` / pool size.\n3. Review application error logs for the checkout service to identify the frequency and timing of \"connection acquisition\" failures.\n4. Inspect recent query performance: Look for long-running or blocked queries that could be holding connections open (e.g., `pg_stat_activity` with state `active` for > 30 seconds).\n5. Correlate with traffic patterns: Is the traffic spike expected (e.g., flash sale, marketing campaign) or anomalous (e.g., bot attack)?\n6. Verify if any code deployment or configuration change occurred to the checkout service or database connection pool settings shortly before the incident.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-db--production-2.md",
+      "title": "Diagnosis Steps"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-db--production-2.md::2::Resolution",
+    "text": "## Resolution\n\n1. **Immediate mitigation:** Temporarily increase the database connection pool size on the checkout service (e.g., via environment variable or config push) to handle the spike. *Note: This should be done in coordination with database capacity planning to avoid overloading the database server.*\n2. **If long-running queries are found:** Kill the offending queries immediately: `SELECT pg_terminate_backend(pid)`.\n3. **If the root cause remains unknown (as in the referenced incident):** Apply the standard runbook fix for \"No hypotheses produced\":\n   - Restart the checkout service pods to reap any stuck connections.\n   - Validate that the number of active connections returns to a normal baseline.\n   - Monitor the connection pool utilization over the next 15 minutes.\n4. **Post-recovery:** Investigate further to determine the underlying cause (e.g., transaction leaks, slow queries, application bug) and implement a permanent fix (e.g., connection pool tuning, query optimization, adding read replicas).",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-db--production-2.md",
+      "title": "Resolution"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-db--production-2.md::3::Observed Incident — 2026-09-02 — INC-DB-",
+    "text": "## Observed Incident — 2026-09-02 — INC-DB-1001\n\n**Severity:** P1\n**Root Cause:** No hypotheses produced; cause could not be determined during investigation.\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.5 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-db--production-2.md",
+      "title": "Observed Incident — 2026-09-02 — INC-DB-1001"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-service--production.md::13::Observed Incident — 2026-09-02 — INC-DB-",
+    "text": "## Observed Incident — 2026-09-02 — INC-DB-1001\n\n**Severity:** P1\n**Root Cause:** Primary cause relates to: ## Symptoms\n\n- `checkout-service` logs show `hikari-pool-1 - Connection is not available, request timed out after Xms`\n- Customers receive \"unable to complete order\" errors during checkout\n- Database \n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-service--production.md",
+      "title": "Observed Incident — 2026-09-02 — INC-DB-1001"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/runbook.md::22::Observed Incident — 2026-09-02 — INC-K8S",
+    "text": "## Observed Incident — 2026-09-02 — INC-K8S-2001\n\n**Severity:** P3\n**Root Cause:** Primary cause relates to: ## ImagePullBackOff\n\n**Alert:** Pod stuck in ImagePullBackOff — image cannot be pulled\n**Severity:** Medium\n**Routing:** platformOnCall\n\n**Impact:**\n- New pods fail to start, capacity drops\n- Deployme\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.75 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/runbook.md",
+      "title": "Observed Incident — 2026-09-02 — INC-K8S-2001"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/runbook.md::23::Observed Incident — 2026-09-02 — INC-K8S",
+    "text": "## Observed Incident — 2026-09-02 — INC-K8S-2001\n\n**Severity:** P3\n**Root Cause:** Primary cause relates to: ## ImagePullBackOff\n\n**Alert:** Pod stuck in ImagePullBackOff — image cannot be pulled\n**Severity:** Medium\n**Routing:** platformOnCall\n\n**Impact:**\n- New pods fail to start, capacity drops\n- Deployme\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.75 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/runbook.md",
+      "title": "Observed Incident — 2026-09-02 — INC-K8S-2001"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/runbook.md::24::Observed Incident — 2026-09-02 — INC-K8S",
+    "text": "## Observed Incident — 2026-09-02 — INC-K8S-2001\n\n**Severity:** P3\n**Root Cause:** Primary cause relates to: ## ImagePullBackOff\n\n**Alert:** Pod stuck in ImagePullBackOff — image cannot be pulled\n**Severity:** Medium\n**Routing:** platformOnCall\n\n**Impact:**\n- New pods fail to start, capacity drops\n- Deployme\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.75 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/runbook.md",
+      "title": "Observed Incident — 2026-09-02 — INC-K8S-2001"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/runbook.md::25::Observed Incident — 2026-09-02 — INC-010",
+    "text": "## Observed Incident — 2026-09-02 — INC-010\n\n**Severity:** P1\n**Root Cause:** Primary cause relates to: ## Pod CrashLoopBackOff (OOMKilled)\n\n**Alert:** Pod restart count > 5 within 10 minutes, termination reason\nOOMKilled\n**Severity:** High\n**Routing:** platformOnCall\n\n**Impact:**\n- Reduced service capa\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.75 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/runbook.md",
+      "title": "Observed Incident — 2026-09-02 — INC-010"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/runbook.md::26::Observed Incident — 2026-09-02 — INC-K8S",
+    "text": "## Observed Incident — 2026-09-02 — INC-K8S-4003\n\n**Severity:** P1\n**Root Cause:** Primary cause relates to: ## Pod CrashLoopBackOff (OOMKilled)\n\n**Alert:** Pod restart count > 5 within 10 minutes, termination reason\nOOMKilled\n**Severity:** High\n**Routing:** platformOnCall\n\n**Impact:**\n- Reduced service capa\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/runbook.md",
+      "title": "Observed Incident — 2026-09-02 — INC-K8S-4003"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/kubernetes--cart-service--production.md::0::Symptoms",
+    "text": "## Symptoms\n\n- Cart-service intermittently fails to resolve `cart-cache.redis.svc.cluster.local` via CoreDNS.\n- Cache read/write operations time out despite the redis cache being healthy.\n- No CPU or memory pressure on cart-service pods.\n- Alert triggers on rising DNS SERVFAIL/NXDOMAIN/timeout rate from the service resolver.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/kubernetes--cart-service--production.md",
+      "title": "Symptoms"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/kubernetes--cart-service--production.md::1::Diagnosis Steps",
+    "text": "## Diagnosis Steps\n\n1. **Check DNS resolution from within the affected pod**:  \n   `kubectl exec <cart-service-pod> -- nslookup cart-cache.redis.svc.cluster.local`  \n   Look for SERVFAIL, NXDOMAIN, or timeout responses.\n2. **Verify CoreDNS pod health**:  \n   `kubectl get pods -n kube-system -l k8s-app=kube-dns`  \n   Ensure all CoreDNS pods are running and ready.\n3. **Inspect CoreDNS logs**:  \n   `kubectl logs -n kube-system -l k8s-app=kube-dns --tail=100`  \n   Look for upstream resolver errors or timeouts.\n4. **Check CoreDNS ConfigMap for misconfiguration**:  \n   `kubectl describe configmap coredns -n kube-system`  \n   Verify forwarders, rewrites, and plugin settings.\n5. **Test external DNS resolution** to rule out upstream resolver issues:  \n   `kubectl exec <cart-service-pod> -- nslookup google.com`\n6. **Look for network policy or CNI issues** that may prevent CoreDNS from reaching upstream resolvers or the kube-dns service.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/kubernetes--cart-service--production.md",
+      "title": "Diagnosis Steps"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/kubernetes--cart-service--production.md::2::Resolution",
+    "text": "## Resolution\n\n1. **Restart CoreDNS pods** to clear transient state:  \n   `kubectl rollout restart -n kube-system deployment/coredns`\n2. **If restart does not resolve**, verify and correct the CoreDNS ConfigMap. Common fixes include:\n   - Ensuring `forward . /etc/resolv.conf` uses valid upstream resolvers.\n   - Verifying the `kubernetes` plugin is correctly configured for the cluster domain.\n   - Removing any malformed rewrite or plugin entries.\n3. **Ensure network connectivity** between CoreDNS pods and the kube-dns service endpoint:\n   - Check `kubectl get svc kube-dns -n kube-system` for a valid ClusterIP.\n   - Validate no blocking network policies exist in the `kube-system` namespace.\n4. **After fix**, confirm recovery by repeatedly resolving the target hostname:  \n   `for i in {1..10}; do kubectl exec <cart-service-pod> -- nslookup cart-cache.redis.svc.cluster.local; sleep 1; done`  \n   Expect all queries to return a valid A record without errors.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/kubernetes--cart-service--production.md",
+      "title": "Resolution"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/kubernetes--cart-service--production.md::3::Observed Incident — 2026-09-02 — INC-NET",
+    "text": "## Observed Incident — 2026-09-02 — INC-NET-4005\n\n**Severity:** P2\n**Root Cause:** Primary cause relates to DNS Resolution Failures\n\n**Alert:** Rising DNS SERVFAIL/NXDOMAIN/timeout rate from a service's resolver, or intermittent connection timeouts to in-cluster hostnames\n**Severity:** High\n**Routing:** \n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/kubernetes--cart-service--production.md",
+      "title": "Observed Incident — 2026-09-02 — INC-NET-4005"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-db--production-2.md::4::Observed Incident — 2026-09-02 — INC-TES",
+    "text": "## Observed Incident — 2026-09-02 — INC-TEST-AMBIG\n\n**Severity:** P2\n**Root Cause:** Primary cause relates to: ## Symptoms\n\n- Customers on the checkout page see intermittent \"unable to complete order\" errors.\n- Application logs from the checkout service show repeated \"failed to acquire connection from pool\" er\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.75 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-db--production-2.md",
+      "title": "Observed Incident — 2026-09-02 — INC-TEST-AMBIG"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-db--production-2.md::5::Observed Incident — 2026-09-02 — INC-TES",
+    "text": "## Observed Incident — 2026-09-02 — INC-TEST-AMBIG\n\n**Severity:** P2\n**Root Cause:** Primary cause relates to: ## Symptoms\n\n- Customers on the checkout page see intermittent \"unable to complete order\" errors.\n- Application logs from the checkout service show repeated \"failed to acquire connection from pool\" er\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.75 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-db--production-2.md",
+      "title": "Observed Incident — 2026-09-02 — INC-TEST-AMBIG"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/runbook.md::27::Observed Incident — 2026-09-02 — INC-CAC",
+    "text": "## Observed Incident — 2026-09-02 — INC-CACHE-4007\n\n**Severity:** P2\n**Root Cause:** ## Cache Stampede After Redis Restart\n\n**Alert:** Cache hit rate collapses (< 20% of baseline) right after a Redis\nrestart/eviction, with origin DB CPU/connection saturation\n**Severity:** High\n**Routing:** prodCritical / dbaOnCall\n\n**Impact:**\n- Origin database receives the full read path load simultaneously\n- Connection pools exhaust; read latency and error rates spike\n- Replication lag grows while the origin is saturated\n\n**RCA Path:**\n1. Confirm the cache event: restart/eviction time and whether the cache came\n   back empty (no AOF/RDB restore, eviction policy flush).\n2. Verify the load spike start time is immediately after the cache event and\n   that miss rate went to ~100% — correlation in the logs is the signature.\n3. Check origin connection pools, CPU, and whether identical queries run\n   concurrently without coalescing.\n4. Rule out organic traffic growth (compare request rate to baseline).\n\n**Solution (recommendations — the on-call engineer applies the fix):**\n- Warm the cache before restoring full read traffic (controlled warming or\n  gradual traffic ramp).\n- Add request coalescing (single-flight) so concurrent identical misses\n  trigger one origin query, and TTL jitter so keys do not expire together.\n- Configure the cache for durability across restarts (AOF/RDB restore) where\n  the data shape allows it.\n- Consider short-lived stale-serve (serve slightly stale values while one\n  refresh runs) as stampede protection.\n\n---\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.8064307570457458 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/runbook.md",
+      "title": "Observed Incident — 2026-09-02 — INC-CACHE-4007"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/runbook.md::28::Observed Incident — 2026-09-02 — INC-MEM",
+    "text": "## Observed Incident — 2026-09-02 — INC-MEM-4002\n\n**Severity:** P1\n**Root Cause:** Primary cause relates to: ## Pod CrashLoopBackOff (OOMKilled)\n\n**Alert:** Pod restart count > 5 within 10 minutes, termination reason\nOOMKilled\n**Severity:** High\n**Routing:** platformOnCall\n\n**Impact:**\n- Reduced service capa\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/runbook.md",
+      "title": "Observed Incident — 2026-09-02 — INC-MEM-4002"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/runbook.md::29::Observed Incident — 2026-09-02 — INC-K8S",
+    "text": "## Observed Incident — 2026-09-02 — INC-K8S-2091\n\n**Severity:** P1\n**Root Cause:** Primary cause relates to: ## Pod CrashLoopBackOff (Configuration Error)\n\n**Alert:** Pod restart count > 5 within 10 minutes with exitCode=1 (application\nstartup failure), shortly after a config/secret/ConfigMap change\n**Severi\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/runbook.md",
+      "title": "Observed Incident — 2026-09-02 — INC-K8S-2091"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-service--production.md::14::Observed Incident — 2026-09-02 — INC-006",
+    "text": "## Observed Incident — 2026-09-02 — INC-006\n\n**Severity:** P2\n**Root Cause:** Primary cause relates to: ## Symptoms\n\n- `checkout-service` logs show `hikari-pool-1 - Connection is not available, request timed out after Xms`\n- Customers receive \"unable to complete order\" errors during checkout\n- Database \n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-service--production.md",
+      "title": "Observed Incident — 2026-09-02 — INC-006"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-service--production.md::15::Observed Incident — 2026-09-02 — INC-DB-",
+    "text": "## Observed Incident — 2026-09-02 — INC-DB-1001\n\n**Severity:** P1\n**Root Cause:** Primary cause relates to: ## Symptoms\n\n- `checkout-service` logs show `hikari-pool-1 - Connection is not available, request timed out after Xms`\n- Customers receive \"unable to complete order\" errors during checkout\n- Database \n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-service--production.md",
+      "title": "Observed Incident — 2026-09-02 — INC-DB-1001"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/runbook.md::30::Observed Incident — 2026-09-02 — INC-005",
+    "text": "## Observed Incident — 2026-09-02 — INC-005\n\n**Severity:** P2\n**Root Cause:** Primary cause relates to: ## Pod CrashLoopBackOff (Configuration Error)\n\n**Alert:** Pod restart count > 5 within 10 minutes with exitCode=1 (application\nstartup failure), shortly after a config/secret/ConfigMap change\n**Severi\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/runbook.md",
+      "title": "Observed Incident — 2026-09-02 — INC-005"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--analytics-postgres--production.md::0::Symptoms",
+    "text": "## Symptoms\n\n- Persistent volume utilization reaches 100%, triggering a critical alert (`PVC utilization > 90% (warning) or 100% with write failures`).\n- PostgreSQL writes fail, and the database switches to read-only mode to prevent data corruption.\n- `INSERT`, `UPDATE`, and `DELETE` operations return disk-full errors.\n- Autovacuum jobs fail, leading to bloat and further degradation.\n- WAL segments accumulate due to a retention backlog (e.g., incomplete/inactive replication slots or misconfigured WAL archiving).\n- Monitoring dashboards show disk space exhaustion on the analytics-postgres data volume.\n- Application errors or increased latency due to inability to write.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--analytics-postgres--production.md",
+      "title": "Symptoms"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--analytics-postgres--production.md::1::Diagnosis Steps",
+    "text": "## Diagnosis Steps\n\n1. **Verify alert details**\n   - Confirm the alert fired for the analytics-postgres pod and PVC (e.g., `pvc-xxxxx`).\n   - Note the current utilization percentage from Prometheus/Grafana or `kubectl top pvc <pvc-name>`.\n\n2. **Identify top space consumers**\n   - Exec into the PostgreSQL pod: `kubectl exec -it <pod> -- bash`\n   - Run `df -h` to see filesystem usage.\n   - Check the data directory (usually `/var/lib/postgresql/data` or similar).\n   - List largest directories: `du -sh /var/lib/postgresql/data/* | sort -rh | head -10`\n   - Specifically examine WAL directory: `du -sh /var/lib/postgresql/data/pg_wal/`\n\n3. **Check WAL accumulation**\n   - List WAL segment files and count: `ls -la /var/lib/postgresql/data/pg_wal/ | wc -l`\n   - Verify replication slots: `SELECT slot_name, active, restart_lsn FROM pg_replication_slots;`\n   - If any slot is inactive or stuck, that prevents WAL cleanup.\n\n4. **Inspect PostgreSQL logs**\n   - Look for recent errors: `kubectl logs <pod> --tail=200 | grep -i error`\n   - Confirm read-only mode: `SELECT pg_is_in_recovery();` (should return `false` normally; if read-only due to disk, `true` after auto-demotion).\n\n5. **Check PVC and storage backend**\n   - `kubectl describe pvc <pvc-name>` for capacity and status.\n   - If using cloud volumes (e.g., EBS, GCE PD), verify from provider console for any anomalies.\n\n6. **Correlate with recent changes**\n   - Review deployments, configuration changes, or WAL archiving modifications. Check if a new replication slot was added or retention policy changed.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--analytics-postgres--production.md",
+      "title": "Diagnosis Steps"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--analytics-postgres--production.md::2::Resolution",
+    "text": "## Resolution\n\n1. **Immediate relief (recover write capability)**\n   - If the database is in read-only mode due to disk full, free disk space to allow PostgreSQL to recover:\n     1. Identify and remove unnecessary WAL segments if replication slots are healthy:\n        - `SELECT pg_switch_wal();` – force a WAL switch after freeing some space.\n        - Manually delete old WAL files only if absolutely necessary and replication is not compromised. **Preferred**: allow PostgreSQL to recycle via checkpoint.\n     2. Clear any archive backlog: remove old archived WAL files from the WAL archive directory (if separate).\n     3. If possible, temporarily increase PVC size:\n        - Edit PVC definition: `kubectl edit pvc <pvc-name>` and increase `spec.resources.requests.storage`.\n        - Wait for the resize to complete and confirm with `kubectl get pvc`.\n\n2. **Remove large temporary or unnecessary data**\n   - Drop unused indexes or materialized views.\n   - Truncate or drop staging tables that are no longer needed – but **caution** with production data.\n   - Run `VACUUM FULL` only if absolutely required and downtime can be tolerated (takes locks). Prefer `VACUUM` (simple) to free space for future writes.\n\n3. **Post‑recovery steps**\n   - Verify the database exited read‑only mode: `SELECT pg_is_in_recovery();` → `f`.\n   - Test writes: `CREATE TABLE test_recovery (id int); INSERT INTO test_recovery VALUES (1); DROP TABLE test_recovery;`\n   - Resume autovacuum by checking `pg_stat_activity` for any stuck backends.\n   - Validate replication slots are active and WAL is being archived properly.\n\n4. **Prevent recurrence**\n   - Set up proactive monitoring with alarms at 80% and 90% utilization.\n   - Configure automated PVC resize policies (e.g., Kubernetes cluster autoscaler for storage).\n   - Review WAL retention: ensure replication slots are monitored and removed when no longer needed, and that WAL archiving completes successfully.\n   - Implement automated WAL cleanup or archive retention policies.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--analytics-postgres--production.md",
+      "title": "Resolution"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--analytics-postgres--production.md::3::Observed Incident — 2026-09-02 — INC-DIS",
+    "text": "## Observed Incident — 2026-09-02 — INC-DISK-4006\n\n**Severity:** P1\n**Root Cause:** Primary cause relates to: ## Persistent Volume Disk Exhaustion\n\n**Alert:** PVC utilization > 90% (warning) or 100% with write failures\n(critical)\n**Severity:** Critical\n**Routing:** dbaOnCall / platformOnCall\n\n**Impact:**\n- Database became read‑only, blocking all write operations.\n- Autovacuum failures caused index bloat and further degradation.\n- Application experienced errors and data ingestion stalled.\n\n**Resolution Evidence:** Diagnosis verified: root‑cause confidence 0.95 meets the threshold and a runbook‑recommended fix exists. No fix has been applied by this system; remediation is pending on‑call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--analytics-postgres--production.md",
+      "title": "Observed Incident — 2026-09-02 — INC-DISK-4006"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/kubernetes--cart-service--production.md::4::Observed Incident — 2026-09-02 — INC-NET",
+    "text": "## Observed Incident — 2026-09-02 — INC-NET-4005\n\n**Severity:** P2\n**Root Cause:** Primary cause relates to: ## Symptoms\n\n- Cart-service intermittently fails to resolve `cart-cache.redis.svc.cluster.local` via CoreDNS.\n- Cache read/write operations time out despite the redis cache being healthy.\n- No CPU or \n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/kubernetes--cart-service--production.md",
+      "title": "Observed Incident — 2026-09-02 — INC-NET-4005"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/third-party--inventory-sync--production.md::0::Symptoms",
+    "text": "## Symptoms\n\n- Elevated 5xx errors on inventory-sync, strongly correlated with HTTP 429 responses from the downstream logistics-vendor-api.\n- Circuit breaker flapping (opening/closing repeatedly) due to excessive retries without effective backoff.\n- Stock-sync jobs falling behind, leading to stale inventory data in the storefront.\n- Unwrapped 429s surfaced to callers as cascading 5xx errors.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/third-party--inventory-sync--production.md",
+      "title": "Symptoms"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/third-party--inventory-sync--production.md::1::Diagnosis Steps",
+    "text": "## Diagnosis Steps\n\n1. **Confirm the downstream API is returning 429**  \n   Check inventory-sync logs for `HTTP 429` responses from `logistics-vendor-api`. Example command:  \n   `grep \"429\" /var/log/inventory-sync/current.log | grep logistics-vendor-api`\n2. **Verify retry behavior**  \n   Look for retry attempts in the logs. A high number of retries within a short window indicates missing/insufficient backoff.\n3. **Inspect circuit breaker state**  \n   Query the circuit breaker metrics (e.g., Prometheus metric `circuit_breaker_state`) for flapping patterns (open → half-open → closed repeatedly).\n4. **Check current downstream rate limit headers**  \n   Parse `X-RateLimit-Remaining` or `Retry-After` headers from the vendor API responses to understand the limit and reset time.\n5. **Assess impact on stock-sync throughput**  \n   Monitor stock-sync job completion rates and lag (e.g., from job queue metrics) to confirm backlog growth.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/third-party--inventory-sync--production.md",
+      "title": "Diagnosis Steps"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/third-party--inventory-sync--production.md::2::Resolution",
+    "text": "## Resolution\n\n1. **Apply exponential backoff to retries**  \n   - Update the retry logic to use exponential backoff with jitter (e.g., initial delay 1s, multiplier 2, max 60s).  \n   - Respect the `Retry-After` header when present.  \n   - Example configuration snippet:  \n     ```yaml\n     retry:\n       max_attempts: 5\n       base_delay: 1s\n       max_delay: 60s\n       backoff_factor: 2\n       jitter: true\n     ```\n2. **Adjust circuit breaker settings**  \n   - Increase the failure threshold to reduce flapping (e.g., from 5 to 10 failures in 30s).  \n   - Set a longer cooldown period (e.g., 60s) before transitioning back to half-open.\n3. **Request upstream rate limit increase (if possible)**  \n   - Contact the logistics-vendor-api team to negotiate a higher quota or purchase a tier upgrade.\n4. **Implement graceful degradation**  \n   - When circuit breaker is open, return stale cached inventory instead of propagating errors.  \n   - Queue stock-sync jobs for later replay.\n5. **Monitor recovery**  \n   - Watch 5xx error rate drop below 1% and stock-sync jobs clear the backlog. Use dashboard like `inventory-sync:error_rate` and `inventory-sync:stock_sync_lag`.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/third-party--inventory-sync--production.md",
+      "title": "Resolution"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/third-party--inventory-sync--production.md::3::Observed Incident — 2026-09-02 — INC-API",
+    "text": "## Observed Incident — 2026-09-02 — INC-API-4004\n\n**Severity:** P1\n**Root Cause:** Downstream API Rate Limiting (HTTP 429)\n\n**Alert:** Sustained 429 responses from a downstream/third-party API, or 5xx rate on the owning service > 5% correlated with 429s\n**Severity:** High\n**Routi** (unfinished field – ignored)\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.75 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/third-party--inventory-sync--production.md",
+      "title": "Observed Incident — 2026-09-02 — INC-API-4004"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/performance--product-catalog--production.md::7::Observed Incident — 2026-09-02 — INC-PER",
+    "text": "## Observed Incident — 2026-09-02 — INC-PERF-3077\n\n**Severity:** P2\n**Root Cause:** ## Observed Incident — 2026-08-31 — INC-PERF-3077\n\n**Severity:** P2\n**Root Cause:** ## Diagnosis Steps\n\n1. Check API gateway logs for 503 response patterns and correlation with product-catalog response times.\n2. Examine product-catalog service metrics (CPU, memory, JVM heap usage, request latency, error rate).\n3. Investigate JVM heap dumps or GC logs for memory leaks, excessive GC pauses, or full GC events.\n4. Review upstream dependency health (database, caching, other services) for slow or failing responses.\n5. Look for recent deployments, configuration changes, or traffic spikes that may have triggered the issue.\n6. If heap saturation is confirmed, analyze heap usage to identify potential memory leaks or high object allocation.\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.8153234720230103 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.8209024667739868 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/performance--product-catalog--production.md",
+      "title": "Observed Incident — 2026-09-02 — INC-PERF-3077"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/runbook.md::31::Observed Incident — 2026-09-02 — INC-K8S",
+    "text": "## Observed Incident — 2026-09-02 — INC-K8S-2001\n\n**Severity:** P3\n**Root Cause:** Primary cause relates to: ## ImagePullBackOff\n\n**Alert:** Pod stuck in ImagePullBackOff — image cannot be pulled\n**Severity:** Medium\n**Routing:** platformOnCall\n\n**Impact:**\n- New pods fail to start, capacity drops\n- Deployme\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.75 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/runbook.md",
+      "title": "Observed Incident — 2026-09-02 — INC-K8S-2001"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/runbook.md::32::Observed Incident — 2026-09-02 — INC-010",
+    "text": "## Observed Incident — 2026-09-02 — INC-010\n\n**Severity:** P1\n**Root Cause:** Primary cause relates to: ## Pod CrashLoopBackOff (OOMKilled)\n\n**Alert:** Pod restart count > 5 within 10 minutes, termination reason\nOOMKilled\n**Severity:** High\n**Routing:** platformOnCall\n\n**Impact:**\n- Reduced service capa\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.75 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/runbook.md",
+      "title": "Observed Incident — 2026-09-02 — INC-010"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/runbook.md::33::Observed Incident — 2026-09-02 — INC-K8S",
+    "text": "## Observed Incident — 2026-09-02 — INC-K8S-4003\n\n**Severity:** P1\n**Root Cause:** Primary cause relates to: ## Pod CrashLoopBackOff (OOMKilled)\n\n**Alert:** Pod restart count > 5 within 10 minutes, termination reason\nOOMKilled\n**Severity:** High\n**Routing:** platformOnCall\n\n**Impact:**\n- Reduced service capa\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/runbook.md",
+      "title": "Observed Incident — 2026-09-02 — INC-K8S-4003"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/runbook.md::34::Observed Incident — 2026-09-02 — INC-AVA",
+    "text": "## Observed Incident — 2026-09-02 — INC-AVAIL-4001\n\n**Severity:** P2\n**Root Cause:** ## Service Availability Degradation (Traffic Spike)\n\n**Alert:** Synthetic availability < 100% for a public endpoint, or request\nrate > 3x the 7-day baseline with rising latency\n**Severity:** Critical\n**Routing:** prodCritical\n\n**Impact:**\n- Users see slow or failed page loads (503/504s)\n- Availability SLO burn; potential revenue loss during campaigns\n- Readiness-probe failures further reduce serving capacity\n\n**RCA Path:**\n1. Confirm the traffic-shape change: compare current request rate against the\n   7-day baseline and check for campaign/marketplace events.\n2. Check HPA behavior: desired vs. current replicas, stabilization windows,\n   and how far scaling lagged behind demand.\n3. Check saturation signals: CPU utilization, connect-queue depth, connection\n   pools, and p99 latency trend.\n4. Correlate readiness/liveness probe failures with the load peak.\n5. Verify no concurrent deployment or configuration change coincided.\n\n**Solution (recommendations — the on-call engineer applies the fix):**\n- Scale up replicas manually to absorb the spike while the HPA catches up\n  (or lower the HPA stabilization window / raise maxReplicas).\n- Restart pods that are wedged by probe failures once capacity is in place.\n- Add/verify upstream timeouts and load-shedding limits so queues drain\n  instead of saturating.\n- After the event, re-tune HPA parameters so reaction time matches the\n  traffic-ramp shape.\n\n---\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.750536322593689 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/runbook.md",
+      "title": "Observed Incident — 2026-09-02 — INC-AVAIL-4001"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/third-party--payment-service--production-2.md::4::Observed Incident — 2026-09-02 — INC-004",
+    "text": "## Observed Incident — 2026-09-02 — INC-004\n\n**Severity:** P1\n**Root Cause:** Primary cause relates to: ## Symptoms\n\n- Payment service HTTP 503 responses exceed 5% of total request volume.\n- Elevated timeout and 5xx errors from the external payment gateway (`payment-gateway-external`).\n- Payment service\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/third-party--payment-service--production-2.md",
+      "title": "Observed Incident — 2026-09-02 — INC-004"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-service--production.md::16::Observed Incident — 2026-09-02 — INC-006",
+    "text": "## Observed Incident — 2026-09-02 — INC-006\n\n**Severity:** P2\n**Root Cause:** Primary cause relates to: ## Symptoms\n\n- `checkout-service` logs show `hikari-pool-1 - Connection is not available, request timed out after Xms`\n- Customers receive \"unable to complete order\" errors during checkout\n- Database \n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-service--production.md",
+      "title": "Observed Incident — 2026-09-02 — INC-006"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/runbook.md::35::Observed Incident — 2026-09-02 — INC-010",
+    "text": "## Observed Incident — 2026-09-02 — INC-010\n\n**Severity:** P1\n**Root Cause:** Primary cause relates to: ## Pod CrashLoopBackOff (OOMKilled)\n\n**Alert:** Pod restart count > 5 within 10 minutes, termination reason\nOOMKilled\n**Severity:** High\n**Routing:** platformOnCall\n\n**Impact:**\n- Reduced service capa\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.75 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/runbook.md",
+      "title": "Observed Incident — 2026-09-02 — INC-010"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-service--production.md::17::Observed Incident — 2026-09-02 — INC-006",
+    "text": "## Observed Incident — 2026-09-02 — INC-006\n\n**Severity:** P2\n**Root Cause:** Primary cause relates to: ## Symptoms\n\n- `checkout-service` logs show `hikari-pool-1 - Connection is not available, request timed out after Xms`\n- Customers receive \"unable to complete order\" errors during checkout\n- Database \n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-service--production.md",
+      "title": "Observed Incident — 2026-09-02 — INC-006"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/runbook.md::36::Observed Incident — 2026-09-02 — INC-010",
+    "text": "## Observed Incident — 2026-09-02 — INC-010\n\n**Severity:** P1\n**Root Cause:** Primary cause relates to: ## Pod CrashLoopBackOff (OOMKilled)\n\n**Alert:** Pod restart count > 5 within 10 minutes, termination reason\nOOMKilled\n**Severity:** High\n**Routing:** platformOnCall\n\n**Impact:**\n- Reduced service capa\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.75 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/runbook.md",
+      "title": "Observed Incident — 2026-09-02 — INC-010"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-service--production.md::18::Observed Incident — 2026-09-02 — INC-006",
+    "text": "## Observed Incident — 2026-09-02 — INC-006\n\n**Severity:** P2\n**Root Cause:** Primary cause relates to: ## Symptoms\n\n- `checkout-service` logs show `hikari-pool-1 - Connection is not available, request timed out after Xms`\n- Customers receive \"unable to complete order\" errors during checkout\n- Database \n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-service--production.md",
+      "title": "Observed Incident — 2026-09-02 — INC-006"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-service--production.md::19::Observed Incident — 2026-09-02 — INC-006",
+    "text": "## Observed Incident — 2026-09-02 — INC-006\n\n**Severity:** P2\n**Root Cause:** Primary cause relates to: ## Symptoms\n\n- `checkout-service` logs show `hikari-pool-1 - Connection is not available, request timed out after Xms`\n- Customers receive \"unable to complete order\" errors during checkout\n- Database \n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-service--production.md",
+      "title": "Observed Incident — 2026-09-02 — INC-006"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/runbook.md::37::Observed Incident — 2026-09-02 — INC-010",
+    "text": "## Observed Incident — 2026-09-02 — INC-010\n\n**Severity:** P1\n**Root Cause:** Primary cause relates to: ## Pod CrashLoopBackOff (OOMKilled)\n\n**Alert:** Pod restart count > 5 within 10 minutes, termination reason\nOOMKilled\n**Severity:** High\n**Routing:** platformOnCall\n\n**Impact:**\n- Reduced service capa\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.75 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/runbook.md",
+      "title": "Observed Incident — 2026-09-02 — INC-010"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-service--production.md::20::Observed Incident — 2026-09-02 — INC-DB-",
+    "text": "## Observed Incident — 2026-09-02 — INC-DB-1001\n\n**Severity:** P1\n**Root Cause:** Primary cause relates to: ## Symptoms\n\n- `checkout-service` logs show `hikari-pool-1 - Connection is not available, request timed out after Xms`\n- Customers receive \"unable to complete order\" errors during checkout\n- Database \n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-service--production.md",
+      "title": "Observed Incident — 2026-09-02 — INC-DB-1001"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-service--production.md::21::Observed Incident — 2026-09-02 — INC-006",
+    "text": "## Observed Incident — 2026-09-02 — INC-006\n\n**Severity:** P2\n**Root Cause:** Primary cause relates to: ## Symptoms\n\n- `checkout-service` logs show `hikari-pool-1 - Connection is not available, request timed out after Xms`\n- Customers receive \"unable to complete order\" errors during checkout\n- Database \n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-service--production.md",
+      "title": "Observed Incident — 2026-09-02 — INC-006"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-service--production.md::22::Observed Incident — 2026-09-02 — INC-006",
+    "text": "## Observed Incident — 2026-09-02 — INC-006\n\n**Severity:** P2\n**Root Cause:** Primary cause relates to: ## Symptoms\n\n- `checkout-service` logs show `hikari-pool-1 - Connection is not available, request timed out after Xms`\n- Customers receive \"unable to complete order\" errors during checkout\n- Database \n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-service--production.md",
+      "title": "Observed Incident — 2026-09-02 — INC-006"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-service--production.md::23::Observed Incident — 2026-09-02 — INC-DB-",
+    "text": "## Observed Incident — 2026-09-02 — INC-DB-1001\n\n**Severity:** P1\n**Root Cause:** Primary cause relates to: ## Symptoms\n\n- `checkout-service` logs show `hikari-pool-1 - Connection is not available, request timed out after Xms`\n- Customers receive \"unable to complete order\" errors during checkout\n- Database \n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-service--production.md",
+      "title": "Observed Incident — 2026-09-02 — INC-DB-1001"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-service--production.md::24::Observed Incident — 2026-09-02 — INC-DB-",
+    "text": "## Observed Incident — 2026-09-02 — INC-DB-1001\n\n**Severity:** P1\n**Root Cause:** Primary cause relates to: ## Symptoms\n\n- `checkout-service` logs show `hikari-pool-1 - Connection is not available, request timed out after Xms`\n- Customers receive \"unable to complete order\" errors during checkout\n- Database \n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-service--production.md",
+      "title": "Observed Incident — 2026-09-02 — INC-DB-1001"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-service--production.md::25::Observed Incident — 2026-09-02 — INC-006",
+    "text": "## Observed Incident — 2026-09-02 — INC-006\n\n**Severity:** P2\n**Root Cause:** Primary cause relates to: ## Symptoms\n\n- `checkout-service` logs show `hikari-pool-1 - Connection is not available, request timed out after Xms`\n- Customers receive \"unable to complete order\" errors during checkout\n- Database \n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-service--production.md",
+      "title": "Observed Incident — 2026-09-02 — INC-006"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/runbook.md::38::Observed Incident — 2026-09-02 — INC-010",
+    "text": "## Observed Incident — 2026-09-02 — INC-010\n\n**Severity:** P1\n**Root Cause:** Primary cause relates to: ## Pod CrashLoopBackOff (OOMKilled)\n\n**Alert:** Pod restart count > 5 within 10 minutes, termination reason\nOOMKilled\n**Severity:** High\n**Routing:** platformOnCall\n\n**Impact:**\n- Reduced service capa\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.75 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/runbook.md",
+      "title": "Observed Incident — 2026-09-02 — INC-010"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-service--production.md::26::Observed Incident — 2026-09-02 — INC-DB-",
+    "text": "## Observed Incident — 2026-09-02 — INC-DB-1001\n\n**Severity:** P1\n**Root Cause:** Primary cause relates to: ## Symptoms\n\n- `checkout-service` logs show `hikari-pool-1 - Connection is not available, request timed out after Xms`\n- Customers receive \"unable to complete order\" errors during checkout\n- Database \n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-service--production.md",
+      "title": "Observed Incident — 2026-09-02 — INC-DB-1001"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/performance--product-catalog--production.md::8::Observed Incident — 2026-09-02 — INC-PER",
+    "text": "## Observed Incident — 2026-09-02 — INC-PERF-3077\n\n**Severity:** P2\n**Root Cause:** ## Observed Incident — 2026-08-31 — INC-PERF-3077\n\n**Severity:** P2\n**Root Cause:** ## Diagnosis Steps\n\n1. Check API gateway logs for 503 response patterns and correlation with product-catalog response times.\n2. Examine product-catalog service metrics (CPU, memory, JVM heap usage, request latency, error rate).\n3. Investigate JVM heap dumps or GC logs for memory leaks, excessive GC pauses, or full GC events.\n4. Review upstream dependency health (database, caching, other services) for slow or failing responses.\n5. Look for recent deployments, configuration changes, or traffic spikes that may have triggered the issue.\n6. If heap saturation is confirmed, analyze heap usage to identify potential memory leaks or high object allocation.\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.8153234720230103 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.8209024667739868 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/performance--product-catalog--production.md",
+      "title": "Observed Incident — 2026-09-02 — INC-PERF-3077"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/runbook.md::39::Observed Incident — 2026-09-02 — INC-K8S",
+    "text": "## Observed Incident — 2026-09-02 — INC-K8S-2091\n\n**Severity:** P1\n**Root Cause:** Primary cause relates to: ## Pod CrashLoopBackOff (Configuration Error)\n\n**Alert:** Pod restart count > 5 within 10 minutes with exitCode=1 (application\nstartup failure), shortly after a config/secret/ConfigMap change\n**Severi\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/runbook.md",
+      "title": "Observed Incident — 2026-09-02 — INC-K8S-2091"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/third-party--payment-service--production-2.md::5::Observed Incident — 2026-09-02 — INC-004",
+    "text": "## Observed Incident — 2026-09-02 — INC-004\n\n**Severity:** P1\n**Root Cause:** Primary cause relates to: ## Symptoms\n\n- Payment service HTTP 503 responses exceed 5% of total request volume.\n- Elevated timeout and 5xx errors from the external payment gateway (`payment-gateway-external`).\n- Payment service\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/third-party--payment-service--production-2.md",
+      "title": "Observed Incident — 2026-09-02 — INC-004"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/runbook.md::40::Observed Incident — 2026-09-02 — INC-005",
+    "text": "## Observed Incident — 2026-09-02 — INC-005\n\n**Severity:** P2\n**Root Cause:** Primary cause relates to: ## Pod CrashLoopBackOff (Configuration Error)\n\n**Alert:** Pod restart count > 5 within 10 minutes with exitCode=1 (application\nstartup failure), shortly after a config/secret/ConfigMap change\n**Severi\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/runbook.md",
+      "title": "Observed Incident — 2026-09-02 — INC-005"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/performance--product-catalog--production.md::9::Observed Incident — 2026-09-02 — INC-PER",
+    "text": "## Observed Incident — 2026-09-02 — INC-PERF-3077\n\n**Severity:** P2\n**Root Cause:** ## Observed Incident — 2026-08-31 — INC-PERF-3077\n\n**Severity:** P2\n**Root Cause:** ## Diagnosis Steps\n\n1. Check API gateway logs for 503 response patterns and correlation with product-catalog response times.\n2. Examine product-catalog service metrics (CPU, memory, JVM heap usage, request latency, error rate).\n3. Investigate JVM heap dumps or GC logs for memory leaks, excessive GC pauses, or full GC events.\n4. Review upstream dependency health (database, caching, other services) for slow or failing responses.\n5. Look for recent deployments, configuration changes, or traffic spikes that may have triggered the issue.\n6. If heap saturation is confirmed, analyze heap usage to identify potential memory leaks or high object allocation.\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.8153234720230103 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.8209024667739868 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/performance--product-catalog--production.md",
+      "title": "Observed Incident — 2026-09-02 — INC-PERF-3077"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-db--production-3.md::0::Symptoms",
+    "text": "## Symptoms\n\n- Customers on the checkout page see intermittent \"unable to complete order\" errors.\n- Application logs show the checkout service repeatedly failing to acquire a connection from the primary database pool.\n- A traffic spike is observed (e.g., flash sale or marketing campaign).",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-db--production-3.md",
+      "title": "Symptoms"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-db--production-3.md::1::Diagnosis Steps",
+    "text": "## Diagnosis Steps\n\n1. Check the database pool utilization metric: `db_pool_active_connections` vs. the configured pool hard limit.\n2. Inspect the wait queue depth: `db_pool_wait_queue_depth` – a growing queue indicates saturation.\n3. Confirm pool exhaustion: utilization at 100% and increasing wait queue confirm the pool is the bottleneck.\n4. Identify long-running queries holding connections via `pg_stat_activity` (or equivalent DB session listing).\n5. Verify the pressure driver: is there a current traffic spike? Check checkout endpoint request rate and concurrency.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-db--production-3.md",
+      "title": "Diagnosis Steps"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-db--production-3.md::2::Resolution",
+    "text": "## Resolution\n\n1. **Restore headroom immediately:**  \n   - Terminate long-running queries identified in Diagnosis (via `pg_terminate_backend` or DB console).  \n   - Scale read replicas if available to offload read traffic.\n2. **Remove the pressure driver:**  \n   - If a traffic spike is active, throttle the checkout endpoint (rate limit or queue) so request concurrency drops below the pool ceiling, allowing the pool to drain.\n3. **Stabilise the pool configuration:**  \n   - Once the pool is drained, increase the pool's maximum connections (or add a second read-pool).  \n   - Enable connection validation and lifetime limits to recycle stale connections.  \n   - Reduce the default query timeout to prevent slow queries from pinning connections.\n4. **Verify recovery:**  \n   - Confirm `db_pool_wait_queue_depth` returns to zero.  \n   - Connection acquisition latency should be under 100ms p95.  \n   - Checkout error rate must drop to baseline before resuming full traffic.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-db--production-3.md",
+      "title": "Resolution"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-db--production-3.md::3::Observed Incident — 2026-09-02 — INC-DB-",
+    "text": "## Observed Incident — 2026-09-02 — INC-DB-1001\n\n**Severity:** P1  \n**Root Cause:** No hypotheses produced; cause could not be determined during investigation.  \n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.5 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-db--production-3.md",
+      "title": "Observed Incident — 2026-09-02 — INC-DB-1001"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-service--production.md::27::Observed Incident — 2026-09-02 — INC-DB-",
+    "text": "## Observed Incident — 2026-09-02 — INC-DB-1001\n\n**Severity:** P1\n**Root Cause:** Primary cause relates to: ## Symptoms\n\n- `checkout-service` logs show `hikari-pool-1 - Connection is not available, request timed out after Xms`\n- Customers receive \"unable to complete order\" errors during checkout\n- Database \n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-service--production.md",
+      "title": "Observed Incident — 2026-09-02 — INC-DB-1001"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-service--production.md::28::Observed Incident — 2026-09-02 — INC-006",
+    "text": "## Observed Incident — 2026-09-02 — INC-006\n\n**Severity:** P2\n**Root Cause:** Primary cause relates to: ## Symptoms\n\n- `checkout-service` logs show `hikari-pool-1 - Connection is not available, request timed out after Xms`\n- Customers receive \"unable to complete order\" errors during checkout\n- Database \n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-service--production.md",
+      "title": "Observed Incident — 2026-09-02 — INC-006"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/runbook.md::41::Observed Incident — 2026-09-02 — INC-010",
+    "text": "## Observed Incident — 2026-09-02 — INC-010\n\n**Severity:** P1\n**Root Cause:** Primary cause relates to: ## Pod CrashLoopBackOff (OOMKilled)\n\n**Alert:** Pod restart count > 5 within 10 minutes, termination reason\nOOMKilled\n**Severity:** High\n**Routing:** platformOnCall\n\n**Impact:**\n- Reduced service capa\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.75 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/runbook.md",
+      "title": "Observed Incident — 2026-09-02 — INC-010"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-service--production.md::29::Observed Incident — 2026-09-02 — INC-DB-",
+    "text": "## Observed Incident — 2026-09-02 — INC-DB-1001\n\n**Severity:** P1\n**Root Cause:** Primary cause relates to: ## Symptoms\n\n- `checkout-service` logs show `hikari-pool-1 - Connection is not available, request timed out after Xms`\n- Customers receive \"unable to complete order\" errors during checkout\n- Database \n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-service--production.md",
+      "title": "Observed Incident — 2026-09-02 — INC-DB-1001"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-service--production.md::30::Observed Incident — 2026-09-02 — INC-DB-",
+    "text": "## Observed Incident — 2026-09-02 — INC-DB-1001\n\n**Severity:** P1\n**Root Cause:** Primary cause relates to: ## Symptoms\n\n- `checkout-service` logs show `hikari-pool-1 - Connection is not available, request timed out after Xms`\n- Customers receive \"unable to complete order\" errors during checkout\n- Database \n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-service--production.md",
+      "title": "Observed Incident — 2026-09-02 — INC-DB-1001"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-service--production.md::31::Observed Incident — 2026-09-02 — INC-006",
+    "text": "## Observed Incident — 2026-09-02 — INC-006\n\n**Severity:** P2\n**Root Cause:** Primary cause relates to: ## Symptoms\n\n- `checkout-service` logs show `hikari-pool-1 - Connection is not available, request timed out after Xms`\n- Customers receive \"unable to complete order\" errors during checkout\n- Database \n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-service--production.md",
+      "title": "Observed Incident — 2026-09-02 — INC-006"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/runbook.md::42::Observed Incident — 2026-09-02 — INC-010",
+    "text": "## Observed Incident — 2026-09-02 — INC-010\n\n**Severity:** P1\n**Root Cause:** Primary cause relates to: ## Pod CrashLoopBackOff (OOMKilled)\n\n**Alert:** Pod restart count > 5 within 10 minutes, termination reason\nOOMKilled\n**Severity:** High\n**Routing:** platformOnCall\n\n**Impact:**\n- Reduced service capa\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.75 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/runbook.md",
+      "title": "Observed Incident — 2026-09-02 — INC-010"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-service--production.md::32::Observed Incident — 2026-09-02 — INC-DB-",
+    "text": "## Observed Incident — 2026-09-02 — INC-DB-1001\n\n**Severity:** P1\n**Root Cause:** Primary cause relates to: ## Symptoms\n\n- `checkout-service` logs show `hikari-pool-1 - Connection is not available, request timed out after Xms`\n- Customers receive \"unable to complete order\" errors during checkout\n- Database \n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-service--production.md",
+      "title": "Observed Incident — 2026-09-02 — INC-DB-1001"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/performance--product-catalog--production.md::10::Observed Incident — 2026-09-02 — INC-PER",
+    "text": "## Observed Incident — 2026-09-02 — INC-PERF-3077\n\n**Severity:** P2\n**Root Cause:** ## Observed Incident — 2026-08-31 — INC-PERF-3077\n\n**Severity:** P2\n**Root Cause:** ## Diagnosis Steps\n\n1. Check API gateway logs for 503 response patterns and correlation with product-catalog response times.\n2. Examine product-catalog service metrics (CPU, memory, JVM heap usage, request latency, error rate).\n3. Investigate JVM heap dumps or GC logs for memory leaks, excessive GC pauses, or full GC events.\n4. Review upstream dependency health (database, caching, other services) for slow or failing responses.\n5. Look for recent deployments, configuration changes, or traffic spikes that may have triggered the issue.\n6. If heap saturation is confirmed, analyze heap usage to identify potential memory leaks or high object allocation.\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.8153234720230103 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.8209024667739868 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/performance--product-catalog--production.md",
+      "title": "Observed Incident — 2026-09-02 — INC-PERF-3077"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/runbook.md::43::Observed Incident — 2026-09-02 — INC-K8S",
+    "text": "## Observed Incident — 2026-09-02 — INC-K8S-2091\n\n**Severity:** P1\n**Root Cause:** Primary cause relates to: ## Pod CrashLoopBackOff (Configuration Error)\n\n**Alert:** Pod restart count > 5 within 10 minutes with exitCode=1 (application\nstartup failure), shortly after a config/secret/ConfigMap change\n**Severi\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/runbook.md",
+      "title": "Observed Incident — 2026-09-02 — INC-K8S-2091"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/third-party--payment-service--production-2.md::6::Observed Incident — 2026-09-02 — INC-004",
+    "text": "## Observed Incident — 2026-09-02 — INC-004\n\n**Severity:** P1\n**Root Cause:** Primary cause relates to: ## Symptoms\n\n- Payment service HTTP 503 responses exceed 5% of total request volume.\n- Elevated timeout and 5xx errors from the external payment gateway (`payment-gateway-external`).\n- Payment service\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/third-party--payment-service--production-2.md",
+      "title": "Observed Incident — 2026-09-02 — INC-004"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/runbook.md::44::Observed Incident — 2026-09-02 — INC-005",
+    "text": "## Observed Incident — 2026-09-02 — INC-005\n\n**Severity:** P2\n**Root Cause:** Primary cause relates to: ## Pod CrashLoopBackOff (Configuration Error)\n\n**Alert:** Pod restart count > 5 within 10 minutes with exitCode=1 (application\nstartup failure), shortly after a config/secret/ConfigMap change\n**Severi\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/runbook.md",
+      "title": "Observed Incident — 2026-09-02 — INC-005"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/performance--product-catalog--production.md::11::Observed Incident — 2026-09-02 — INC-PER",
+    "text": "## Observed Incident — 2026-09-02 — INC-PERF-3077\n\n**Severity:** P2\n**Root Cause:** ## Observed Incident — 2026-08-31 — INC-PERF-3077\n\n**Severity:** P2\n**Root Cause:** ## Diagnosis Steps\n\n1. Check API gateway logs for 503 response patterns and correlation with product-catalog response times.\n2. Examine product-catalog service metrics (CPU, memory, JVM heap usage, request latency, error rate).\n3. Investigate JVM heap dumps or GC logs for memory leaks, excessive GC pauses, or full GC events.\n4. Review upstream dependency health (database, caching, other services) for slow or failing responses.\n5. Look for recent deployments, configuration changes, or traffic spikes that may have triggered the issue.\n6. If heap saturation is confirmed, analyze heap usage to identify potential memory leaks or high object allocation.\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.8153234720230103 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.8209024667739868 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/performance--product-catalog--production.md",
+      "title": "Observed Incident — 2026-09-02 — INC-PERF-3077"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-db--production-4.md::0::Symptoms",
+    "text": "## Symptoms\n\n- Customers receive intermittent \"unable to complete order\" errors on the checkout page.\n- Checkout service logs show repeated failures to acquire a connection from the primary database pool.\n- Spike in traffic (e.g., flash sale or campaign) correlates with the onset of errors.\n- `db_pool_active_connections` shows utilization at 100% with a growing wait queue.\n- `db_pool_wait_queue_depth` increases while connection acquisition latency rises above 100ms p95.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-db--production-4.md",
+      "title": "Symptoms"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-db--production-4.md::1::Diagnosis Steps",
+    "text": "## Diagnosis Steps\n\n1. Check the database pool utilization metric: `db_pool_active_connections` against the pool hard limit.\n2. Inspect wait-queue depth in the database pool metrics to determine if connections are queued.\n3. Review application logs for \"unable to acquire connection\" errors correlating with the pool metrics.\n4. Query the database session listing (e.g., `pg_stat_activity`) to identify long-running queries holding connections.\n5. Confirm the traffic spike source (e.g., flash sale, campaign) via traffic monitoring dashboards.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-db--production-4.md",
+      "title": "Diagnosis Steps"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-db--production-4.md::2::Resolution",
+    "text": "## Resolution\n\n1. **Confirm the pool is the bottleneck:** Verify `db_pool_active_connections` is at 100% utilization with a growing wait queue.\n2. **Restore headroom immediately:** Terminate long-running queries found in `pg_stat_activity` or the DB session listing. If available, scale read replicas to offload connections.\n3. **Remove the pressure driver:** If a traffic spike (flash sale/campaign) is active, throttle the checkout endpoint using rate limiting or queueing to reduce request concurrency below the pool ceiling. Allow the pool to drain.\n4. **Stabilise the pool config:**\n   - Raise the pool's maximum connections.\n   - Add a second read-pool if applicable.\n   - Enable connection validation and set connection lifetime limits to recycle stale connections.\n   - Reduce the default query timeout to prevent slow queries from pinning connections.\n5. **Verify recovery:**\n   - Confirm `db_pool_wait_queue_depth` returns to zero.\n   - Ensure connection acquisition latency is back under 100ms p95.\n   - Verify checkout error rate drops to baseline before resuming full traffic.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-db--production-4.md",
+      "title": "Resolution"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-db--production-4.md::3::Observed Incident — 2026-09-02 — INC-DB-",
+    "text": "## Observed Incident — 2026-09-02 — INC-DB-1001\n\n**Severity:** P1\n**Root Cause:** No hypotheses produced; cause could not be determined during investigation.\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.5 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-db--production-4.md",
+      "title": "Observed Incident — 2026-09-02 — INC-DB-1001"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-service--production.md::33::Observed Incident — 2026-09-02 — INC-DB-",
+    "text": "## Observed Incident — 2026-09-02 — INC-DB-1001\n\n**Severity:** P1\n**Root Cause:** Primary cause relates to: ## Symptoms\n\n- `checkout-service` logs show `hikari-pool-1 - Connection is not available, request timed out after Xms`\n- Customers receive \"unable to complete order\" errors during checkout\n- Database \n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-service--production.md",
+      "title": "Observed Incident — 2026-09-02 — INC-DB-1001"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/infrastructure--content-service--staging.md::0::Symptoms",
+    "text": "## Symptoms\n\n- Container memory usage is approximately 1.07 GB against a 1 Gi limit, leaving ~0% headroom.\n- GC thrashing is observed, with frequent and prolonged garbage collection cycles.\n- The container is one allocation spike away from an OOMKill.\n- This is a high-but-stable usage pattern with a real burst profile of content lookups.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/infrastructure--content-service--staging.md",
+      "title": "Symptoms"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/infrastructure--content-service--staging.md::1::Diagnosis Steps",
+    "text": "## Diagnosis Steps\n\n1. **Verify the alert:** Confirm that the \"Container High Memory Usage\" alert is firing and check the exact usage vs. limit in your monitoring tool (e.g., Grafana, Datadog).\n2. **Inspect container metrics:** Run `kubectl top pod <pod-name> --containers` to see current memory usage and compare to the configured limit.\n3. **Check JVM heap status (content-service is a Java application):** Use `kubectl exec <pod-name> -- jcmd 1 VM.native_memory summary` or attach a jconsole/jmx client to review heap and non-heap usage.\n4. **Examine GC logs:** Retrieve GC logs from the container (e.g., `/var/log/gc.log`) and look for frequency, pause time, and promotion failures that indicate memory pressure.\n5. **Identify memory allocation patterns:** Review recent request traffic for content lookups to determine if a burst caused the spike or if memory is leaking over time.\n6. **Rule out memory leak:** Check for retained heap dumps or increasing heap usage after GC cycles.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/infrastructure--content-service--staging.md",
+      "title": "Diagnosis Steps"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/infrastructure--content-service--staging.md::2::Resolution",
+    "text": "## Resolution\n\n1. **Increase the memory limit** for the content-service container. A common safe step is to raise the limit from 1 Gi to 1.5 Gi or 2 Gi, depending on the application's expected peak usage. Update the Kubernetes deployment manifest and apply:\n   ```yaml\n   resources:\n     limits:\n       memory: 1.5Gi\n     requests:\n       memory: 1Gi\n   ```\n2. **Tune JVM heap settings** if a heap dump analysis shows high overhead. For example, adjust `-Xmx` and `-Xms` to 1 Gi or lower to leave room for non-heap memory. Add or modify the JVM options in the container's startup command.\n3. **Optimize memory usage in the application** by reviewing content caching strategies, reducing cache TTL, or implementing a more efficient data structure.\n4. **Apply the fix** and monitor the pod for at least 15 minutes to confirm memory stabilizes with sufficient headroom (~20% or more).",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/infrastructure--content-service--staging.md",
+      "title": "Resolution"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/infrastructure--content-service--staging.md::3::Observed Incident — 2026-09-03 — INC-MEM",
+    "text": "## Observed Incident — 2026-09-03 — INC-MEM-4002\n\n**Severity:** P3  \n**Root Cause:** Primary cause relates to: ## Container High Memory Usage\n\n**Alert:** Container memory usage within 5% of its limit, or headroom ≈ 0%\nfor more than 5 minutes  \n**Severity:** High  \n**Routing:** platformOnCall\n\n**Impact:**\n- Heavy G\n\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/infrastructure--content-service--staging.md",
+      "title": "Observed Incident — 2026-09-03 — INC-MEM-4002"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/database--checkout-db--production-2.md::6::Observed Incident — 2026-09-03 — INC-006",
+    "text": "## Observed Incident — 2026-09-03 — INC-006\n\n**Severity:** P1\n**Root Cause:** Primary cause relates to: ## Symptoms\n\n- Customers on the checkout page see intermittent \"unable to complete order\" errors.\n- Application logs from the checkout service show repeated \"failed to acquire connection from pool\" er\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/database--checkout-db--production-2.md",
+      "title": "Observed Incident — 2026-09-03 — INC-006"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/infrastructure--content-service--staging.md::4::Observed Incident — 2026-09-03 — INC-MEM",
+    "text": "## Observed Incident — 2026-09-03 — INC-MEM-4002\n\n**Severity:** P2\n**Root Cause:** Primary cause relates to: ## Symptoms\n\n- Container memory usage is approximately 1.07 GB against a 1 Gi limit, leaving ~0% headroom.\n- GC thrashing is observed, with frequent and prolonged garbage collection cycles.\n- The cont\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/infrastructure--content-service--staging.md",
+      "title": "Observed Incident — 2026-09-03 — INC-MEM-4002"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/third-party--inventory-sync--production-2.md::0::Symptoms",
+    "text": "## Symptoms\n\n- Elevated 5xx errors on inventory-sync, strongly correlated with HTTP 429 responses from the downstream logistics-vendor-api.\n- Circuit breaker flapping (opening/closing repeatedly) due to retries without effective backoff.\n- Stock-sync jobs are falling behind, causing storefront inventory to go stale.\n- Unwrapped 429s surfaced to callers as cascading 5xx errors.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/third-party--inventory-sync--production-2.md",
+      "title": "Symptoms"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/third-party--inventory-sync--production-2.md::1::Diagnosis Steps",
+    "text": "## Diagnosis Steps\n\n1. Check inventory-sync error rate in monitoring dashboard; filter by HTTP 5xx status codes.\n2. Inspect downstream logistics-vendor-api response metrics; look for HTTP 429 rate limit responses.\n3. Review circuit breaker state transitions in inventory-sync logs to confirm flapping pattern.\n4. Verify retry logic configuration—confirm if exponential backoff is disabled or misconfigured.\n5. Check stock-sync job lag and storefront inventory freshness metrics.\n6. Confirm correlation between 429 spikes and 5xx error spikes using time-series graphs.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/third-party--inventory-sync--production-2.md",
+      "title": "Diagnosis Steps"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/third-party--inventory-sync--production-2.md::2::Resolution",
+    "text": "## Resolution\n\n1. **Immediate mitigation:** Apply rate limiting on inventory-sync outbound requests to logistics-vendor-api. Configure a client-side rate limiter with a lower request-per-second limit matching the downstream API's documented cap.\n2. **Enable proper circuit breaker:** Set the circuit breaker to half-open after failure threshold and enforce a minimum open duration (e.g., 30 seconds) to prevent flapping.\n3. **Improve retry logic:** Implement exponential backoff with jitter for retries when receiving HTTP 429 responses. Maximum retries should be limited (e.g., 3 attempts).\n4. **Surface 429s properly:** Map HTTP 429 responses to a dedicated client error (e.g., HTTP 503) internally to prevent cascading 5xx to callers, or log and skip gracefully.\n5. **Notify downstream API provider** if sustained rate limits indicate capacity issues.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/third-party--inventory-sync--production-2.md",
+      "title": "Resolution"
+    }
+  },
+  {
+    "id": "knowledge_base/runbooks/third-party--inventory-sync--production-2.md::3::Observed Incident — 2026-09-03 — INC-API",
+    "text": "## Observed Incident — 2026-09-03 — INC-API-4004\n\n**Severity:** P1\n**Root Cause:** Primary cause relates to:\n- Elevated 5xx errors on inventory-sync, strongly correlated with HTTP 429 responses from the downstream logistics-vendor-api.\n- Circuit breaker flapping (opening/closing repeatedly) due to retries without effective backoff.\n\n**Resolution Evidence:** Diagnosis verified: root-cause confidence 0.95 meets the threshold and a runbook-recommended fix exists. No fix has been applied by this system; remediation is pending on-call action.",
+    "metadata": {
+      "source_file": "knowledge_base/runbooks/third-party--inventory-sync--production-2.md",
+      "title": "Observed Incident — 2026-09-03 — INC-API-4004"
     }
   }
 ]

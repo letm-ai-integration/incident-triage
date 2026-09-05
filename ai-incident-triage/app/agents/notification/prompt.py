@@ -23,7 +23,11 @@ def build_user_prompt(rca_report: IncidentReport, contact: OnCallContact) -> str
         or "(none listed)"
     )
     actions = "\n".join(f"- {a}" for a in rca_report.recommended_actions)
-    resolution_evidence = rca_report.verification.resolution_evidence or "(none listed)"
+    # Framing note: the report's verification step confirms the DIAGNOSIS is
+    # complete and a recommended fix exists -- it does NOT mean any fix was
+    # applied (this pipeline investigates, it does not remediate).
+    diagnosis_verified = rca_report.verification.is_resolved
+    diagnosis_evidence = rca_report.verification.resolution_evidence or "(none listed)"
 
     return f"""ON-CALL CONTACT:
 Name: {contact.name}
@@ -39,9 +43,9 @@ affected_services: {services}
 primary_root_cause: {root_cause.primary_cause.description}
 root_cause_confidence: {root_cause.confidence_score}
 contributing_factors: {contributing}
-recommended_actions:
+recommended_actions (RECOMMENDATIONS for the on-call engineer, not completed actions):
 {actions if actions else "- (none listed)"}
-verification_is_resolved: {rca_report.verification.is_resolved}
-resolution_evidence: {resolution_evidence}
+diagnosis_verified: {diagnosis_verified}
+diagnosis_evidence: {diagnosis_evidence}
 report_created_at: {rca_report.created_at.isoformat()}
 """

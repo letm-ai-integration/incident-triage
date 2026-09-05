@@ -37,6 +37,7 @@ from app.domain.models.evidence import Evidence
 from app.domain.models.hypothesis import Hypothesis
 from app.domain.models.incident import Incident
 from app.graph.builder import create_graph
+from app.graph.tracing import trace_async, trace_sync
 
 
 class InvestigationPhaseState(TypedDict, total=False):
@@ -65,19 +66,30 @@ class InvestigationPhaseState(TypedDict, total=False):
 
 
 async def log_analysis_node(state: InvestigationPhaseState) -> dict:
-    """Subagent 1: LLM-backed log analysis (deterministic keyword fallback)."""
+    """Subagent 1: LLM-backed log analysis (deterministic keyword fallback).
+
+    Traced: records a ``subagent`` entry on the running node's ``agent_trace``
+    (and live status on the event bus) so the UI can show this fan-out call
+    with its own status/duration.
+    """
+    incident = state["incident"]
     return {
-        "log_analysis": await _log_evidence(
-            state["incident"], state.get("llm"), state.get("classification")
+        "log_analysis": await trace_async(
+            "log_analysis",
+            {"incident": incident.incident_id, "service": incident.service},
+            _log_evidence(incident, state.get("llm"), state.get("classification")),
         )
     }
 
 
 async def kubernetes_node(state: InvestigationPhaseState) -> dict:
     """Subagent 2: LLM-backed Kubernetes analysis (deterministic fallback)."""
+    incident = state["incident"]
     return {
-        "kubernetes_analysis": await _kubernetes_evidence(
-            state["incident"], state.get("classification"), state.get("llm")
+        "kubernetes_analysis": await trace_async(
+            "kubernetes",
+            {"incident": incident.incident_id, "service": incident.service},
+            _kubernetes_evidence(incident, state.get("classification"), state.get("llm")),
         )
     }
 
@@ -90,7 +102,13 @@ def runbook_node(state: InvestigationPhaseState) -> dict:
         "description": incident.description,
         "raw_logs": incident.raw_logs,
     }
-    evidence, hypothesis = _runbook_evidence(alert_data, state.get("classification"))
+    evidence, hypothesis = trace_sync(
+        "runbook",
+        {"incident": incident.incident_id, "service": incident.service},
+        _runbook_evidence,
+        alert_data,
+        state.get("classification"),
+    )
     return {"runbook_analysis": evidence, "runbook_hypothesis": hypothesis}
 
 

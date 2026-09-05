@@ -1,0 +1,75 @@
+{
+  "incident_id": "INC-K8S-4003",
+  "title": "orders-worker pods CrashLoopBackOff — OOMKilled (exit 137)",
+  "description": "orders-worker pods are being killed by the kernel and cycling through CrashLoopBackOff. Termination reason is OOMKilled with exit code 137: each pod's heap climbs past the container memory limit while processing its batch queue and the container is killed, then restarts and repeats. This is repeated kill-and-restart, not high-but-stable usage.",
+  "source": "kubernetes",
+  "service": "orders-worker",
+  "environment": "PRODUCTION",
+  "priority_hint": "P1",
+  "tags": [
+    "kubernetes",
+    "oomkilled",
+    "crashloopbackoff",
+    "exit-137",
+    "orders"
+  ],
+  "timestamp": "2026-08-31T14:05:00.000Z",
+  "raw_logs": [
+    "2026-08-31T13:58:02.000Z WARN  [kubelet] Pod orders-worker-5b7f2-1: memory usage at 96% of limit (1022MiB/1Gi), container java-batch",
+    "2026-08-31T13:58:44.300Z ERROR [kubelet] Out of memory: Killed process 27 (java) total-vm:4218124kB, anon-rss:1073152kB, rank 1 — container orders-worker OOMKilled",
+    "2026-08-31T13:58:44.500Z INFO  [kubelet] Pod orders-worker-5b7f2-1 container java-batch terminated: reason=OOMKilled exitCode=137",
+    "2026-08-31T13:59:02.100Z WARN  [kubelet] Back-off restarting failed container java-batch in pod orders-worker-5b7f2-1 (crash count 7, back-off 5m0s)",
+    "2026-08-31T13:59:47.800Z ERROR [orders-worker] java.lang.OutOfMemoryError: Java heap space while draining batch segment orders-batch-2026-08-31T13:55",
+    "2026-08-31T14:00:31.200Z WARN  [orders-worker] batch segment orders-batch-2026-08-31T13:55 requeued after abnormal termination (attempt 8)",
+    "2026-08-31T14:01:12.600Z ERROR [kube-state-metrics] kube_pod_container_status_restarts_total{pod=orders-worker-5b7f2-1} = 27 (was 20 ten minutes ago)",
+    "2026-08-31T14:02:05.900Z ERROR [orders-worker] uncaught exception in batch worker loop: java.lang.OutOfMemoryError: Requested array size exceeds VM limit — worker exiting"
+  ],
+  "raw_events": [
+    {
+      "type": "config_change",
+      "service": "orders-worker",
+      "timestamp": "2026-08-31T13:40:00.000Z",
+      "description": "Batch queue consumer group rebalanced: this worker now owns 4 partitions instead of 2, doubling per-cycle heap pressure"
+    },
+    {
+      "type": "deployment",
+      "service": "orders-worker",
+      "timestamp": "2026-08-29T09:15:00.000Z",
+      "description": "Rolled out orders-worker v4.3.0 with a new in-memory enrichment step (no memory limit adjustment)"
+    }
+  ],
+  "raw_alerts": [
+    {
+      "alert_name": "PodOOMKilled",
+      "severity": "critical",
+      "fired_at": "2026-08-31T14:05:00.000Z",
+      "labels": {"service": "orders-worker", "namespace": "orders", "container": "java-batch"}
+    },
+    {
+      "alert_name": "PodCrashLoopBackOff",
+      "severity": "critical",
+      "fired_at": "2026-08-31T14:06:00.000Z",
+      "labels": {"service": "orders-worker", "namespace": "orders"}
+    }
+  ],
+  "raw_metrics": {
+    "restart_count_last_30m": 27,
+    "last_termination_reason": "OOMKilled",
+    "last_termination_exit_code": 137,
+    "memory_limit_bytes": 1073741824,
+    "peak_memory_usage_bytes": 1098904576,
+    "pods_desired": 4,
+    "pods_running": 4,
+    "pods_ready": 0,
+    "batch_backlog_depth": 18400,
+    "batch_lag_minutes": 34
+  },
+  "metadata": {
+    "scenario_id": "INC-K8S-4003",
+    "service": "orders-worker",
+    "namespace": "orders",
+    "pod_prefix": "orders-worker",
+    "data_sources": ["k8s_events", "logs_traces", "metrics"],
+    "runbook": "Pod CrashLoopBackOff (OOMKilled)"
+  }
+}

@@ -1,0 +1,73 @@
+{
+  "incident_id": "INC-AVAIL-4001",
+  "title": "Service Availability < 100% on frontend-web during traffic spike",
+  "description": "Synthetic availability checks report frontend-web below 100% availability during a flash-sale traffic spike. Request rate exceeds what the current replica count can absorb: the HPA scales too slowly, request queues saturate, p99 latency climbs, and readiness probes start failing under load.",
+  "source": "datadog",
+  "service": "frontend-web",
+  "environment": "PRODUCTION",
+  "priority_hint": "P1",
+  "tags": [
+    "availability",
+    "traffic-spike",
+    "autoscaling",
+    "saturation",
+    "frontend"
+  ],
+  "timestamp": "2026-08-31T09:12:00.000Z",
+  "raw_logs": [
+    "2026-08-31T09:05:10.000Z WARN  [frontend-web] request rate 4.8x above 7-day baseline (flash sale campaign opened)",
+    "2026-08-31T09:06:02.300Z INFO  [kube-controller] HPA frontend-web: target CPU 65%, current 92% - scaling 6 -> 8 replicas (delayed 4m by stabilization window)",
+    "2026-08-31T09:07:44.100Z WARN  [frontend-web] upstream connect queue depth 240 exceeds soft limit 200; shedding least-recent requests",
+    "2026-08-31T09:08:21.700Z ERROR [frontend-web] request latency SLO breach: p99=3950ms (objective 800ms)",
+    "2026-08-31T09:09:05.900Z WARN  [kubelet] readiness probe \"http-get /healthz\" failing for pod frontend-web-7d9c4-2: context deadline exceeded (2000ms)",
+    "2026-08-31T09:09:48.400Z ERROR [frontend-web] availability check /storefront returned 503 after 5s: no ready endpoints in pool (4 of 10 pods not ready)",
+    "2026-08-31T09:10:12.500Z ERROR [lb-frontend] availability synthetic check failed: storefront availability 91.2% (objective 100%)",
+    "2026-08-31T09:11:30.800Z WARN  [frontend-web] connection pool to session-store saturating: active=98 idle=2 waiting=51"
+  ],
+  "raw_events": [
+    {
+      "type": "traffic_spike",
+      "service": "frontend-web",
+      "timestamp": "2026-08-31T09:05:00.000Z",
+      "description": "Flash-sale campaign opened; request rate 4.8x baseline within 90 seconds"
+    },
+    {
+      "type": "config_change",
+      "service": "frontend-web",
+      "timestamp": "2026-08-30T16:40:00.000Z",
+      "description": "HPA stabilization window raised to 300s and target CPU lowered to 65% in previous tuning change"
+    }
+  ],
+  "raw_alerts": [
+    {
+      "alert_name": "ServiceAvailabilityBelow100",
+      "severity": "critical",
+      "fired_at": "2026-08-31T09:12:00.000Z",
+      "labels": {"service": "frontend-web", "namespace": "storefront", "team": "storefront"}
+    },
+    {
+      "alert_name": "HighP99Latency",
+      "severity": "warning",
+      "fired_at": "2026-08-31T09:08:30.000Z",
+      "labels": {"service": "frontend-web", "namespace": "storefront"}
+    }
+  ],
+  "raw_metrics": {
+    "availability_pct": 91.2,
+    "requests_per_second": 9600,
+    "baseline_requests_per_second": 2000,
+    "hpa_desired_replicas": 14,
+    "hpa_current_replicas": 8,
+    "cpu_utilization_pct": 92,
+    "p99_latency_ms": 3950,
+    "connect_queue_depth": 240,
+    "readiness_probe_failures_last_10m": 37
+  },
+  "metadata": {
+    "scenario_id": "INC-AVAIL-4001",
+    "service": "frontend-web",
+    "namespace": "storefront",
+    "data_sources": ["logs_traces", "k8s_events", "metrics"],
+    "runbook": "Service Availability Degradation (Traffic Spike)"
+  }
+}

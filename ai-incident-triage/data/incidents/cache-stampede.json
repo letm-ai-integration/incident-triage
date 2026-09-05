@@ -1,0 +1,76 @@
+{
+  "incident_id": "INC-CACHE-4007",
+  "title": "Cache stampede on pricing-service after Redis eviction/restart",
+  "description": "pricing-cache (Redis) restarted and came back with an empty cache; the entire pricing read path hit the pricing-db origin simultaneously. Origin CPU saturated, connection pools exhausted, and pricing read latency spiked minutes after the cache event — the load spike is directly correlated in time with the Redis restart, not with organic traffic growth.",
+  "source": "prometheus",
+  "service": "pricing-service",
+  "environment": "PRODUCTION",
+  "priority_hint": "P2",
+  "tags": [
+    "cache",
+    "redis",
+    "stampede",
+    "origin-load",
+    "pricing"
+  ],
+  "timestamp": "2026-08-31T18:33:00.000Z",
+  "raw_logs": [
+    "2026-08-31T18:27:41.100Z WARN  [pricing-cache] Redis restarted (pod rescheduled to node k3-worker-07); RDB snapshot load skipped, cache starting empty (maxmemory-policy allkeys-lru)",
+    "2026-08-31T18:27:44.300Z ERROR [pricing-service] redis connection pool reset: 240 idle connections dropped after failover, reconnecting",
+    "2026-08-31T18:28:02.900Z WARN  [pricing-service] cache miss rate 100% (was 4%) — 18400 req/s now bypassing cache to pricing-db",
+    "2026-08-31T18:28:35.600Z ERROR [pricing-db] connection pool exhausted: active=180/180, wait queue 640, CPU 97%",
+    "2026-08-31T18:29:18.200Z ERROR [pricing-service] GET /v1/pricing?sku=SKU-55210 timed out after 5000ms (origin query p99 4400ms, baseline 12ms)",
+    "2026-08-31T18:30:04.700Z WARN  [pricing-service] 3 concurrent identical origin queries for 1.9M SKUs — no request coalescing/dedup in effect",
+    "2026-08-31T18:31:12.400Z ERROR [pricing-db] too many connections error for 38 new clients; replication lag climbing to 41s under load",
+    "2026-08-31T18:32:29.800Z INFO  [pricing-cache] cache warming: keyspace 38% populated, miss rate down to 62%",
+    "2026-08-31T18:33:51.500Z WARN  [lb-pricing] pricing read error rate 11.2% (timeouts + 500s), baseline 0.2%"
+  ],
+  "raw_events": [
+    {
+      "type": "deployment",
+      "service": "pricing-cache",
+      "timestamp": "2026-08-31T18:26:00.000Z",
+      "description": "Node drain on k3-worker-02 rescheduled the Redis pod; restart completed 18:27:41 with an empty cache (no AOF/RDB restore configured)"
+    },
+    {
+      "type": "config_change",
+      "service": "pricing-service",
+      "timestamp": "2026-08-12T10:00:00.000Z",
+      "description": "TTL jitter and request coalescing disabled during a past tuning change; stampede protection absent"
+    }
+  ],
+  "raw_alerts": [
+    {
+      "alert_name": "CacheHitRateCollapse",
+      "severity": "critical",
+      "fired_at": "2026-08-31T18:29:00.000Z",
+      "labels": {"service": "pricing-service", "cache": "pricing-cache"}
+    },
+    {
+      "alert_name": "OriginDbSaturation",
+      "severity": "critical",
+      "fired_at": "2026-08-31T18:30:00.000Z",
+      "labels": {"service": "pricing-db", "namespace": "pricing"}
+    }
+  ],
+  "raw_metrics": {
+    "cache_hit_rate_pct": 0.0,
+    "cache_hit_rate_baseline_pct": 96.0,
+    "origin_qps": 18400,
+    "origin_qps_baseline": 740,
+    "pricing_db_cpu_pct": 97,
+    "pricing_db_pool_active": 180,
+    "pricing_db_pool_max": 180,
+    "pricing_read_p99_ms": 4400,
+    "pricing_read_p99_baseline_ms": 12,
+    "error_rate_pct": 11.2,
+    "replication_lag_seconds": 41
+  },
+  "metadata": {
+    "scenario_id": "INC-CACHE-4007",
+    "service": "pricing-service",
+    "namespace": "pricing",
+    "data_sources": ["logs_traces", "metrics"],
+    "runbook": "Cache Stampede After Redis Restart"
+  }
+}

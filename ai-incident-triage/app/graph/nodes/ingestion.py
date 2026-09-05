@@ -6,8 +6,9 @@
 # is implemented). It only writes fields declared on ``IncidentState``.
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
+from hashlib import sha256
+from typing import Any
 from uuid import uuid4
 
 from langchain_core.runnables import RunnableConfig
@@ -22,7 +23,7 @@ from app.guardrails.pii_guard import check_pii
 from app.guardrails.prompt_injection import check_prompt_injection
 
 
-def ingestion_node(state: IncidentState, config: Optional[RunnableConfig] = None) -> dict:
+def ingestion_node(state: IncidentState, config: RunnableConfig | None = None) -> dict:
     """Normalize raw input into an ``Incident`` and seed workflow bookkeeping."""
     deps = get_deps(config)
     service = deps.get("ingestion_service", _default_ingest)
@@ -70,13 +71,51 @@ def _run_input_guardrails(incident: Incident) -> list[dict]:
     return findings
 
 
+def _resolve_incident_id(raw: dict[str, Any], state: IncidentState) -> str:
+    """Assign the incident's identity with an explicit, stable-first priority.
+
+    1. Explicit ``incident_id`` in the raw input wins.
+    2. An already-assigned ``incident_id`` in graph state wins.
+    3. A stable identifier inside ``metadata`` (``scenario_id`` -- what the mock
+       incidents use -- or ``incident_id``/``id``) is the incident's real
+       identity and is used instead of minting a new one.
+    4. Otherwise derive a *reproducible* id from title + service + timestamp so
+       re-running the same input twice produces the same id.
+    5. Pure-random generation is the last-resort fallback only.
+    """
+    if raw.get("incident_id"):
+        return str(raw["incident_id"])
+    if state.get("incident_id"):
+        return str(state["incident_id"])
+    metadata = raw.get("metadata") or {}
+    if isinstance(metadata, dict):
+        for key in ("scenario_id", "incident_id", "id"):
+            if metadata.get(key):
+                return str(metadata[key])
+    # Reproducible fallback: hash the identity-defining fields (NOT wall-clock
+    # time), so the same input maps to the same id on every run.
+    basis = "|".join(
+        str(raw.get(field) or "") for field in ("title", "service", "timestamp")
+    )
+    if basis.strip("|-"):
+        return f"INC-{sha256(basis.encode('utf-8')).hexdigest()[:8]}"
+    # Last resort: genuinely unknown origin -- random, clearly not stable.
+    return f"INC-{uuid4().hex[:8]}"
+
+
 def _default_ingest(state: IncidentState, deps: dict) -> dict:
-    """Fallback ingestion: build an ``Incident`` from ``raw_input``."""
+    """Fallback ingestion: build an ``Incident`` from ``raw_input``.
+
+    Accepts BOTH log/alert/event key conventions so every mock incident file
+    flows through identically: the ``logs``/``events``/``alerts``/``metrics``
+    style (legacy mock files) and the ``raw_logs``/``raw_events``/``raw_alerts``/
+    ``raw_metrics`` style (INC-006 and the expanded incident set). Before this
+    dual read, files using the ``raw_*`` keys had their data silently dropped
+    here.
+    """
     raw = state.get("raw_input") or {}
     incident = Incident(
-        incident_id=raw.get("incident_id")
-        or state.get("incident_id")
-        or f"INC-{uuid4().hex[:8]}",
+        incident_id=_resolve_incident_id(raw, state),
         title=raw.get("title", "Untitled incident"),
         description=raw.get("description", ""),
         source=raw.get("source", "unknown"),
@@ -85,10 +124,10 @@ def _default_ingest(state: IncidentState, deps: dict) -> dict:
         priority_hint=_parse_priority(raw.get("priority_hint")),
         tags=raw.get("tags", []),
         timestamp=_parse_timestamp(raw.get("timestamp")),
-        raw_logs=raw.get("logs", []),
-        raw_events=raw.get("events", []),
-        raw_alerts=raw.get("alerts", []),
-        raw_metrics=raw.get("metrics", {}),
+        raw_logs=raw.get("raw_logs") or raw.get("logs") or [],
+        raw_events=raw.get("raw_events") or raw.get("events") or [],
+        raw_alerts=raw.get("raw_alerts") or raw.get("alerts") or [],
+        raw_metrics=raw.get("raw_metrics") or raw.get("metrics") or {},
         metadata=raw.get("metadata", {}),
     )
     return {
@@ -110,7 +149,7 @@ def _parse_environment(value: Any) -> Environment:
     return Environment.DEVELOPMENT
 
 
-def _parse_priority(value: Any) -> Optional[Priority]:
+def _parse_priority(value: Any) -> Priority | None:
     if isinstance(value, Priority):
         return value
     if isinstance(value, str):
@@ -128,5 +167,5 @@ def _parse_timestamp(value: Any) -> datetime:
         try:
             return datetime.fromisoformat(value)
         except ValueError:
-            return datetime.now(timezone.utc)
-    return datetime.now(timezone.utc)
+            return datetime.now(UTC)
+    return datetime.now(UTC)

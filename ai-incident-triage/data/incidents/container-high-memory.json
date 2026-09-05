@@ -1,0 +1,72 @@
+{
+  "incident_id": "INC-MEM-4002",
+  "title": "Container High Memory Usage Alert on content-service",
+  "description": "The content-service container is sitting at its memory limit: usage ~1.07 GB against a 1 Gi limit (~0% headroom) during a burst of content lookups. GC is thrashing and the container is one allocation spike away from an OOMKill. This is high-but-stable usage with a real burst profile behind it, not a crash loop.",
+  "source": "prometheus",
+  "service": "content-service",
+  "environment": "STAGING",
+  "priority_hint": "P2",
+  "tags": [
+    "memory",
+    "container",
+    "quarkus",
+    "gc-pressure",
+    "capacity"
+  ],
+  "timestamp": "2026-08-31T12:31:00.000Z",
+  "raw_logs": [
+    "{\"timestamp\":\"2026-08-31T12:27:17.727693Z\",\"sequence\":8217,\"loggerClassName\":\"org.slf4j.impl.Slf4jLogger\",\"loggerName\":\"com.mockcorp.commerce.contentservice.app.controllers.v2\",\"level\":\"INFO\",\"message\":\"getContentByUid stack=web, name=redirection_items\",\"threadName\":\"executor-thread-2\",\"threadId\":102,\"mdc\":{\"affiliate_code\":\"001\"},\"processName\":\"/work/quarkus/application\",\"processId\":1,\"IMAGE_TAG\":\"1.0.0\",\"requestDuration\":\"142ms\",\"region\":\"us-east-1\",\"environment\":\"staging\"}",
+    "{\"timestamp\":\"2026-08-31T12:27:17.728181Z\",\"sequence\":8225,\"loggerClassName\":\"org.slf4j.impl.Slf4jLogger\",\"loggerName\":\"com.mockcorp.commerce.contentservice.app.locale.TenantLocaleContext\",\"level\":\"INFO\",\"message\":\"Supported contains normalized language\",\"threadName\":\"executor-thread-2\",\"threadId\":102,\"mdc\":{\"affiliate_code\":\"001\"},\"processName\":\"/work/quarkus/application\",\"processId\":1,\"IMAGE_TAG\":\"2.0.0\",\"locale\":\"en-US\",\"tenantId\":\"tenant-mock-42\",\"environment\":\"staging\"}",
+    "{\"timestamp\":\"2026-08-31T12:27:24.310002Z\",\"sequence\":8401,\"loggerClassName\":\"org.slf4j.impl.Slf4jLogger\",\"loggerName\":\"com.mockcorp.commerce.contentservice.app.controllers.v2\",\"level\":\"INFO\",\"message\":\"getContentByUid stack=web, name=redirection_items\",\"threadName\":\"executor-thread-5\",\"threadId\":105,\"mdc\":{\"affiliate_code\":\"001\"},\"processName\":\"/work/quarkus/application\",\"processId\":1,\"IMAGE_TAG\":\"1.0.0\",\"requestDuration\":\"489ms\",\"region\":\"us-east-1\",\"environment\":\"staging\"}",
+    "{\"timestamp\":\"2026-08-31T12:27:31.874120Z\",\"sequence\":8588,\"loggerClassName\":\"org.slf4j.impl.Slf4jLogger\",\"loggerName\":\"com.mockcorp.commerce.contentservice.app.controllers.v2\",\"level\":\"WARN\",\"message\":\"getContentByUid slow response, degradation suspected stack=web\",\"threadName\":\"executor-thread-1\",\"threadId\":101,\"mdc\":{\"affiliate_code\":\"001\"},\"processName\":\"/work/quarkus/application\",\"processId\":1,\"IMAGE_TAG\":\"1.0.0\",\"requestDuration\":\"1876ms\",\"region\":\"us-east-1\",\"environment\":\"staging\"}",
+    "{\"timestamp\":\"2026-08-31T12:27:52.091673Z\",\"sequence\":9012,\"loggerClassName\":\"org.slf4j.impl.Slf4jLogger\",\"loggerName\":\"io.quarkus.runtime.graal.GCInstrumentation\",\"level\":\"WARN\",\"message\":\"GC pause 812ms, heap 1042MiB/1073MiB after collection, 14 full GCs in last 60s\",\"threadName\":\"G1 GC Service Thread\",\"threadId\":12,\"mdc\":{},\"processName\":\"/work/quarkus/application\",\"processId\":1,\"IMAGE_TAG\":\"1.0.0\",\"region\":\"us-east-1\",\"environment\":\"staging\"}",
+    "{\"timestamp\":\"2026-08-31T12:28:19.550341Z\",\"sequence\":9477,\"loggerClassName\":\"org.slf4j.impl.Slf4jLogger\",\"loggerName\":\"com.mockcorp.commerce.contentservice.app.cache.ContentCacheLoader\",\"level\":\"WARN\",\"message\":\"in-process content cache at 97% capacity, eviction thrash detected entries=49850/51200\",\"threadName\":\"executor-thread-3\",\"threadId\":103,\"mdc\":{\"affiliate_code\":\"001\"},\"processName\":\"/work/quarkus/application\",\"processId\":1,\"IMAGE_TAG\":\"1.0.0\",\"region\":\"us-east-1\",\"environment\":\"staging\"}",
+    "{\"timestamp\":\"2026-08-31T12:28:58.207954Z\",\"sequence\":9930,\"loggerClassName\":\"org.slf4j.impl.Slf4jLogger\",\"loggerName\":\"org.jboss.threads.Executor\",\"level\":\"ERROR\",\"message\":\"executor-thread pool saturation: 128/128 threads busy, queue backlog 964\",\"threadName\":\"executor-thread-9\",\"threadId\":109,\"mdc\":{},\"processName\":\"/work/quarkus/application\",\"processId\":1,\"IMAGE_TAG\":\"1.0.0\",\"region\":\"us-east-1\",\"environment\":\"staging\"}",
+    "{\"timestamp\":\"2026-08-31T12:29:40.668220Z\",\"sequence\":10402,\"loggerClassName\":\"org.slf4j.impl.Slf4jLogger\",\"loggerName\":\"io.quarkus.kubernetes.runtime.ProbeRecorder\",\"level\":\"WARN\",\"message\":\"liveness probe slow: /health/live answered in 3.1s (threshold 2s), GC pause suspected\",\"threadName\":\"executor-thread-0\",\"threadId\":100,\"mdc\":{},\"processName\":\"/work/quarkus/application\",\"processId\":1,\"IMAGE_TAG\":\"1.0.0\",\"region\":\"us-east-1\",\"environment\":\"staging\"}"
+  ],
+  "raw_events": [
+    {
+      "type": "traffic_spike",
+      "service": "content-service",
+      "timestamp": "2026-08-31T12:25:00.000Z",
+      "description": "Content lookup burst from partner integration replay (4.1x normal request rate for 25 minutes)"
+    },
+    {
+      "type": "config_change",
+      "service": "content-service",
+      "timestamp": "2026-08-28T11:00:00.000Z",
+      "description": "In-process content cache max-entries raised from 32k to 51.2k without a corresponding memory limit change"
+    }
+  ],
+  "raw_alerts": [
+    {
+      "alert_name": "ContainerHighMemoryUsage",
+      "severity": "warning",
+      "fired_at": "2026-08-31T12:31:00.000Z",
+      "labels": {"service": "content-service", "namespace": "commerce", "container": "content-service"}
+    },
+    {
+      "alert_name": "MemoryHeadroomCritical",
+      "severity": "critical",
+      "fired_at": "2026-08-31T12:33:00.000Z",
+      "labels": {"service": "content-service", "namespace": "commerce"}
+    }
+  ],
+  "raw_metrics": {
+    "memory_limit_bytes": 1073741824,
+    "memory_usage_bytes": 1148276736,
+    "memory_headroom_pct": 0.0,
+    "working_set_bytes": 1130328064,
+    "full_gc_count_last_10m": 14,
+    "gc_pause_ms_max": 812,
+    "heap_used_pct_of_limit": 97.1,
+    "request_rate_multiplier_vs_baseline": 4.1
+  },
+  "metadata": {
+    "scenario_id": "INC-MEM-4002",
+    "service": "content-service",
+    "namespace": "commerce",
+    "data_sources": ["logs_traces", "metrics"],
+    "runbook": "Container High Memory Usage"
+  }
+}

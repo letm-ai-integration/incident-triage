@@ -94,7 +94,10 @@ def test_success_path_sends_email_to_oncall_contact(monkeypatch):
         agent_module,
         "create_structured_agent",
         lambda **kwargs: _FakeAgent(
-            NotificationEmail(subject="[P1] payments-api incident resolved", body="<p>root cause fixed</p>")
+            NotificationEmail(
+                subject="[P1] payments-api - RCA complete, remediation recommended",
+                body="<p>root cause diagnosed; runbook recommends remediation</p>",
+            )
         ),
     )
     monkeypatch.setattr(agent_module, "send_email", _fake_send(captured))
@@ -107,8 +110,8 @@ def test_success_path_sends_email_to_oncall_contact(monkeypatch):
     assert result.recipient == "ayush.sharma@example.com"
     assert result.message_id == "msg-123"
     assert captured["to"] == "ayush.sharma@example.com"
-    assert captured["subject"] == "[P1] payments-api incident resolved"
-    assert captured["html_body"] == "<p>root cause fixed</p>"
+    assert captured["subject"] == "[P1] payments-api - RCA complete, remediation recommended"
+    assert captured["html_body"] == "<p>root cause diagnosed; runbook recommends remediation</p>"
 
 
 def test_llm_prompt_is_composed_from_report_fields(monkeypatch):
@@ -197,3 +200,21 @@ def test_parser_raises_on_missing_structured_response():
 def test_parser_raises_on_wrong_type():
     with pytest.raises(TypeError, match="structured_response"):
         parse_notification_response({"structured_response": {"not": "a model"}})
+
+
+def test_template_fallback_never_claims_resolution():
+    """The deterministic fallback must frame output as RCA + recommendations.
+
+    It must use the renamed runbook heading, compose a What happened narrative
+    of at least five sentences, and never claim a fix was applied/resolved.
+    """
+    email = agent_module._draft_email_template(_report())
+
+    assert "resolved" not in email.subject.lower()
+    assert "resolved" not in email.body.lower()
+    assert "Steps to be taken as per Runbook for fix:" in email.body
+    assert "Note:" in email.body  # closing investigation-only disclaimer
+    # What happened narrative: every sentence is its own <p> -- at least 5.
+    what_happened = email.body.split("<h3>What happened</h3>")[1].split("<h3>")[0]
+    assert what_happened.count("<p>") >= 5
+    assert "no fix has been applied" in email.body.lower() or "no remediation has been applied" in email.body.lower()

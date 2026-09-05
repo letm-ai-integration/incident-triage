@@ -7,23 +7,57 @@
   "environment": "PRODUCTION",
   "priority_hint": "P2",
   "tags": ["http503", "performance", "latency", "product-catalog"],
-  "timestamp": "2026-08-24T11:47:52+00:00",
-  "events": [
-    {"type": "traffic_spike", "service": "product-catalog", "timestamp": "2026-08-24T11:30:00+00:00", "description": "Search request volume up 2.6x following a marketing email send"},
-    {"type": "deployment", "service": "product-catalog", "timestamp": "2026-08-24T10:00:00+00:00", "description": "Deployed product-catalog v1.19.3 with an updated search-result caching layer"}
+  "timestamp": "2026-08-24T11:47:52.000Z",
+  "raw_logs": [
+    "2026-08-24T11:31:02.000Z WARN  [product-catalog] GC pause 2100ms — heap 93% after full GC, search traffic 2.6x baseline",
+    "2026-08-24T11:33:44.300Z ERROR [api-gateway] upstream product-catalog returned 503: no healthy upstream within timeout window",
+    "2026-08-24T11:35:19.800Z WARN  [product-catalog] health check /health/ready answered in 3.9s (threshold 2s), GC pause suspected",
+    "2026-08-24T11:38:51.600Z ERROR [product-catalog] java.lang.OutOfMemoryError: GC overhead limit exceeded while building search-result cache",
+    "2026-08-24T11:41:27.200Z ERROR [api-gateway] HTTP 503 rate 16.4% for product-catalog route (baseline 0.2%); p99 upstream latency 4820ms",
+    "2026-08-24T11:44:09.500Z WARN  [product-catalog] evicting search-result cache entries under memory pressure (cache size 51200 -> 30720)",
+    "2026-08-24T11:47:31.900Z ERROR [product-catalog] readiness probe failed for 6 of 10 pods during GC pause window"
   ],
-  "alerts": [
-    {"name": "HighHttp503Rate", "severity": "warning", "fired_at": "2026-08-24T11:46:00+00:00"},
-    {"name": "HeapUsageCritical", "severity": "critical", "fired_at": "2026-08-24T11:47:00+00:00"}
+  "raw_events": [
+    {
+      "type": "traffic_spike",
+      "service": "product-catalog",
+      "timestamp": "2026-08-24T11:30:00.000Z",
+      "description": "Search request volume up 2.6x following a marketing email send"
+    },
+    {
+      "type": "deployment",
+      "service": "product-catalog",
+      "timestamp": "2026-08-24T10:00:00.000Z",
+      "description": "Deployed product-catalog v1.19.3 with an updated search-result caching layer"
+    }
   ],
-  "metrics": {
+  "raw_alerts": [
+    {
+      "alert_name": "HighHttp503Rate",
+      "severity": "warning",
+      "fired_at": "2026-08-24T11:46:00.000Z",
+      "labels": {"service": "product-catalog", "namespace": "storefront"}
+    },
+    {
+      "alert_name": "HeapUsageCritical",
+      "severity": "critical",
+      "fired_at": "2026-08-24T11:47:00.000Z",
+      "labels": {"service": "product-catalog", "namespace": "storefront"}
+    }
+  ],
+  "raw_metrics": {
     "http_503_rate_pct": 16.4,
     "p99_latency_ms": 4820,
     "jvm_heap_usage_pct": 95,
-    "gc_pause_ms_avg": 2200
+    "gc_pause_ms_avg": 2200,
+    "search_request_rate_multiplier": 2.6
   },
   "metadata": {
+    "scenario_id": "INC-PERF-3077",
+    "service": "product-catalog",
+    "namespace": "storefront",
     "region": "ap-southeast-2",
-    "on_call_team": "SRE"
+    "data_sources": ["logs_traces", "metrics"],
+    "runbook": "HTTP 503 Service Unavailable"
   }
 }

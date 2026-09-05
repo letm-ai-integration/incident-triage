@@ -1,0 +1,72 @@
+{
+  "incident_id": "INC-NET-4005",
+  "title": "DNS resolution failures causing intermittent timeouts on cart-service",
+  "description": "cart-service intermittently fails to resolve cart-cache.redis.svc.cluster.local via CoreDNS: lookups return SERVFAIL/NXDOMAIN or time out, so a fraction of cart reads/writes stall and time out even though the cache itself is healthy. This is a name-resolution pattern, not resource exhaustion — CPU and memory on cart-service are nominal.",
+  "source": "pagerduty",
+  "service": "cart-service",
+  "environment": "PRODUCTION",
+  "priority_hint": "P2",
+  "tags": [
+    "dns",
+    "coredns",
+    "timeouts",
+    "intermittent",
+    "networking"
+  ],
+  "timestamp": "2026-08-31T16:41:00.000Z",
+  "raw_logs": [
+    "2026-08-31T16:33:18.400Z WARN  [cart-service] DNS lookup cart-cache.redis.svc.cluster.local failed: i/o timeout after 5000ms (resolver 172.20.0.10:53)",
+    "2026-08-31T16:33:52.900Z ERROR [cart-service] UnknownHostException: cart-cache.redis.svc.cluster.local: Name or service not known (NXDOMAIN from upstream)",
+    "2026-08-31T16:34:30.100Z WARN  [cart-service] redis client reconnect attempt 4/10: connect timeout resolving hostname cart-cache.redis.svc.cluster.local",
+    "2026-08-31T16:35:07.600Z ERROR [coredns] plugin/serve: SERVFAIL for cart-cache.redis.svc.cluster.local A IN: upstream read timed out after 2s (backend etcd latency spike)",
+    "2026-08-31T16:35:49.300Z WARN  [cart-service] request GET /cart/9f82e1/items failed after 2 DNS retries: resolution timeout (elapsed 10012ms)",
+    "2026-08-31T16:36:31.800Z INFO  [cart-service] DNS lookup cart-cache.redis.svc.cluster.local succeeded (attempt 3, 4100ms) — intermittent recovery",
+    "2026-08-31T16:37:22.500Z ERROR [coredns] health: upstream DNS 172.20.0.10:53 probe failed 3x in last 60s; caching stale answers for ttl window",
+    "2026-08-31T16:39:04.700Z WARN  [cart-service] p99 cart read latency 4380ms (baseline 90ms) — correlated with DNS failure bursts, not cache load",
+    "2026-08-31T16:40:41.200Z ERROR [lb-cart] 7.8% of cart requests returned 504 in last 10m (baseline 0.1%)"
+  ],
+  "raw_events": [
+    {
+      "type": "config_change",
+      "service": "coredns",
+      "timestamp": "2026-08-31T16:25:00.000Z",
+      "description": "NodeCoreDNSPodCount scaling change deployed; CoreDNS pods briefly restart-looped, upstream conn pool drained"
+    },
+    {
+      "type": "traffic_spike",
+      "service": "cart-service",
+      "timestamp": "2026-08-31T16:30:00.000Z",
+      "description": "Cart read rate up 2.2x (evening shopping window) — increased DNS query volume against degraded CoreDNS"
+    }
+  ],
+  "raw_alerts": [
+    {
+      "alert_name": "DNSResolutionFailures",
+      "severity": "critical",
+      "fired_at": "2026-08-31T16:41:00.000Z",
+      "labels": {"service": "cart-service", "namespace": "cart", "resolver": "coredns"}
+    },
+    {
+      "alert_name": "HighHttp504Rate",
+      "severity": "warning",
+      "fired_at": "2026-08-31T16:40:50.000Z",
+      "labels": {"service": "cart-service", "namespace": "cart"}
+    }
+  ],
+  "raw_metrics": {
+    "dns_failure_rate_pct": 9.6,
+    "dns_lookup_p99_ms": 5010,
+    "coredns_upstream_probe_failures_last_10m": 3,
+    "http_504_rate_pct": 7.8,
+    "cart_read_p99_latency_ms": 4380,
+    "cart_service_cpu_pct": 31,
+    "cart_service_memory_pct": 44
+  },
+  "metadata": {
+    "scenario_id": "INC-NET-4005",
+    "service": "cart-service",
+    "namespace": "cart",
+    "data_sources": ["logs_traces", "k8s_events", "metrics"],
+    "runbook": "DNS Resolution Failures"
+  }
+}

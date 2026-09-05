@@ -13,8 +13,30 @@
     "v1.12.0"
   ],
   "timestamp": "2026-08-06T10:31:00.000Z",
-  "raw_logs": [],
-  "raw_events": [],
+  "raw_logs": [
+    "2026-08-06T10:31:18.000Z WARN  [payment-service] payment-gateway-external latency 4100ms (p99 baseline 380ms) on charge requests",
+    "2026-08-06T10:33:02.400Z ERROR [payment-service] ReadTimeoutException: payment-gateway-external did not respond within 5000ms (trace deadbeef-a1b2)",
+    "2026-08-06T10:35:19.700Z ERROR [payment-gateway-external] HTTP 503 Service Unavailable: upstream processor capacity exceeded",
+    "2026-08-06T10:36:44.100Z WARN  [payment-service] retrying charge charge_9f82e1 attempt 2/3 (backoff 500ms)",
+    "2026-08-06T10:38:55.800Z ERROR [payment-service] circuit breaker CB-payment-gateway OPEN after 8 consecutive timeouts",
+    "2026-08-06T10:41:12.300Z WARN  [payment-service] deferring 1240 charge authorizations to retry queue while breaker OPEN",
+    "2026-08-06T10:46:31.600Z INFO  [payment-gateway-external] provider recovered: 200 OK, latency 410ms",
+    "2026-08-06T10:48:47.900Z INFO  [payment-service] circuit breaker CB-payment-gateway HALF_OPEN; draining deferred charge queue"
+  ],
+  "raw_events": [
+    {
+      "type": "third_party_degradation",
+      "service": "payment-gateway-external",
+      "timestamp": "2026-08-06T10:31:00.000Z",
+      "description": "External payment gateway began returning timeouts/503s (provider-side capacity event)"
+    },
+    {
+      "type": "recovery",
+      "service": "payment-gateway-external",
+      "timestamp": "2026-08-06T10:46:00.000Z",
+      "description": "Provider recovered; payment-service drained the deferred charge queue"
+    }
+  ],
   "raw_alerts": [
     {
       "alert_name": "ThirdPartyDependencyTimeout",
@@ -26,9 +48,17 @@
       }
     }
   ],
-  "raw_metrics": {},
+  "raw_metrics": {
+    "gateway_timeout_rate_pct": 42.0,
+    "gateway_error_5xx_rate_pct": 18.0,
+    "circuit_breaker_open_minutes": 11,
+    "deferred_charges": 1240,
+    "charge_failure_rate_pct": 6.4
+  },
   "metadata": {
     "scenario_id": "INC-004",
+    "service": "payment-service",
+    "namespace": "prod",
     "pod_prefix": "payment-service",
     "deploy_version": "v1.12.0",
     "trace_id_prefix": "deadbeef",
@@ -42,6 +72,7 @@
       "logs_traces",
       "external_api_logs",
       "metrics"
-    ]
+    ],
+    "runbook": "Third-Party API Timeout"
   }
 }

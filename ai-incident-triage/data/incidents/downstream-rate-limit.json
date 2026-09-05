@@ -1,0 +1,72 @@
+{
+  "incident_id": "INC-API-4004",
+  "title": "Elevated 5xx errors on inventory-sync from downstream API rate limiting (HTTP 429)",
+  "description": "logistics-vendor-api began returning HTTP 429 (rate limit exceeded) to inventory-sync. Retries without effective backoff amplified the request volume, the circuit breaker flapped, and unwrapped 429s surfaced to callers as cascading 5xx errors. Stock-sync jobs are falling behind and storefront inventory is going stale.",
+  "source": "grafana",
+  "service": "inventory-sync",
+  "environment": "PRODUCTION",
+  "priority_hint": "P2",
+  "tags": [
+    "rate-limit",
+    "http-429",
+    "cascading-failure",
+    "retry-storm",
+    "third-party"
+  ],
+  "timestamp": "2026-08-31T15:22:00.000Z",
+  "raw_logs": [
+    "2026-08-31T15:14:02.100Z WARN  [inventory-sync] logistics-vendor-api responded 429 Too Many Requests, remaining quota 0 (reset in 60s)",
+    "2026-08-31T15:14:03.400Z WARN  [inventory-sync] retrying stock update sku=SKU-88121 attempt 2/5 (backoff 50ms)",
+    "2026-08-31T15:14:04.900Z WARN  [inventory-sync] retrying stock update sku=SKU-88121 attempt 3/5 (backoff 100ms)",
+    "2026-08-31T15:14:22.700Z ERROR [inventory-sync] circuit breaker CB-logistics-vendor OPEN after 5 consecutive failures (429/503 mix)",
+    "2026-08-31T15:15:01.300Z ERROR [inventory-sync] stock update failed permanently sku=SKU-88121: DownstreamRateLimitedException wrapped as InternalServerError (HTTP 500) to caller",
+    "2026-08-31T15:16:12.800Z WARN  [inventory-sync] circuit breaker CB-logistics-vendor HALF_OPEN — probe request returned 429 again, re-opening",
+    "2026-08-31T15:17:40.500Z ERROR [inventory-sync] 5xx error rate 22.4% on /v1/inventory/sync (baseline 0.3%); 4128 requests failed in last 5m",
+    "2026-08-31T15:19:55.600Z WARN  [inventory-sync] vendor quota window reset observed; 429s continue from secondary gateway region=eu-west-1",
+    "2026-08-31T15:21:08.200Z ERROR [inventory-sync] sync lag alert: oldest pending stock event is 14 minutes old (SLO 5m)"
+  ],
+  "raw_events": [
+    {
+      "type": "traffic_spike",
+      "service": "logistics-vendor-api",
+      "timestamp": "2026-08-31T15:10:00.000Z",
+      "description": "Vendor-side capacity event: logistics-vendor-api cut per-client quota from 600 to 150 req/min (noticed via 429 headers)"
+    },
+    {
+      "type": "config_change",
+      "service": "inventory-sync",
+      "timestamp": "2026-08-25T08:00:00.000Z",
+      "description": "Retry policy set to 5 attempts with fixed 50-100ms backoff and no jitter or quota-aware throttling"
+    }
+  ],
+  "raw_alerts": [
+    {
+      "alert_name": "DownstreamRateLimited429",
+      "severity": "critical",
+      "fired_at": "2026-08-31T15:22:00.000Z",
+      "labels": {"service": "inventory-sync", "dependency": "logistics-vendor-api", "namespace": "inventory"}
+    },
+    {
+      "alert_name": "HighHttp5xxRate",
+      "severity": "critical",
+      "fired_at": "2026-08-31T15:18:00.000Z",
+      "labels": {"service": "inventory-sync", "namespace": "inventory"}
+    }
+  ],
+  "raw_metrics": {
+    "http_429_rate_pct_from_vendor": 68.0,
+    "http_5xx_rate_pct": 22.4,
+    "baseline_5xx_rate_pct": 0.3,
+    "retry_amplification_factor": 4.2,
+    "circuit_breaker_state_flaps_last_30m": 6,
+    "sync_lag_minutes": 14,
+    "failed_requests_last_5m": 4128
+  },
+  "metadata": {
+    "scenario_id": "INC-API-4004",
+    "service": "inventory-sync",
+    "namespace": "inventory",
+    "data_sources": ["external_api_logs", "logs_traces", "metrics"],
+    "runbook": "Downstream API Rate Limiting (HTTP 429)"
+  }
+}

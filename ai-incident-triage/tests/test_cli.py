@@ -28,10 +28,10 @@ def test_auto_approve_database_timeout() -> None:
 def test_auto_approve_unresolved_incident() -> None:
     result = runner.invoke(
         app,
-        [str(INCIDENTS / "imagepullbackoff.json"), "--auto-approve"],
+        [str(INCIDENTS / "telemetry-gap.json"), "--auto-approve"],
     )
     assert result.exit_code == 0
-    assert "ImagePullBackOff" in result.stdout
+    assert "Session cache misses" in result.stdout
     assert "unresolved" in result.stdout
 
 

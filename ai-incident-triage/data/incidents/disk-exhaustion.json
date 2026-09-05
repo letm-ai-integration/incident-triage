@@ -1,0 +1,72 @@
+{
+  "incident_id": "INC-DISK-4006",
+  "title": "Disk space exhaustion on analytics-postgres persistent volume",
+  "description": "The analytics-postgres data persistent volume is at 100% utilization: WAL segments and a runaway retention backlog filled the volume, PostgreSQL switched to read-only after failing to write, and inserts/autovacuum are failing. This is a storage-capacity failure on a stateful workload, not a compute or memory issue.",
+  "source": "cloudwatch",
+  "service": "analytics-postgres",
+  "environment": "PRODUCTION",
+  "priority_hint": "P1",
+  "tags": [
+    "disk",
+    "persistent-volume",
+    "postgres",
+    "write-failure",
+    "capacity"
+  ],
+  "timestamp": "2026-08-31T17:52:00.000Z",
+  "raw_logs": [
+    "2026-08-31T17:40:12.000Z WARN  [node-exporter] filesystem /var/lib/postgresql/data: disk utilization 96% (49.9GiB/52GiB used)",
+    "2026-08-31T17:44:38.500Z ERROR [postgres] could not write WAL segment 0000000100001F4D000000AB: No space left on device",
+    "2026-08-31T17:45:02.700Z FATAL [postgres] could not write to file \"pg_wal/xlogtemp.29\": No space left on device — entering read-only mode to protect consistency",
+    "2026-08-31T17:45:44.100Z ERROR [postgres] autovacuum worker failed on table events.page_views: could not extend file \"base/16385/24701\": No space left on device",
+    "2026-08-31T17:46:29.900Z ERROR [analytics-ingest] batch insert failed: ERROR  could not complete INSERT into events.page_views (cause: read-only transaction)",
+    "2026-08-31T17:47:51.300Z WARN  [kubelet] PersistentVolumeClaim data-analytics-postgres-0: capacity 52Gi, used 52Gi (100%), reclaimable 0",
+    "2026-08-31T17:49:15.600Z ERROR [postgres] checkpoint cannot complete: could not pre-allocate WAL — checkpoint retrying",
+    "2026-08-31T17:51:40.800Z WARN  [analytics-ingest] ingest queue depth 1.2M rows and climbing; oldest event is 22 minutes old"
+  ],
+  "raw_events": [
+    {
+      "type": "config_change",
+      "service": "analytics-postgres",
+      "timestamp": "2026-08-20T00:00:00.000Z",
+      "description": "events.page_views retention reduced from 90 to 30 days planned, but the cleanup job has been failing since 2026-08-24 (unnoticed)"
+    },
+    {
+      "type": "traffic_spike",
+      "service": "analytics-ingest",
+      "timestamp": "2026-08-31T14:00:00.000Z",
+      "description": "Event ingestion up 3.1x after new client onboarded; WAL generation rate doubled"
+    }
+  ],
+  "raw_alerts": [
+    {
+      "alert_name": "PersistentVolumeNearlyFull",
+      "severity": "warning",
+      "fired_at": "2026-08-31T17:41:00.000Z",
+      "labels": {"pvc": "data-analytics-postgres-0", "namespace": "analytics"}
+    },
+    {
+      "alert_name": "PersistentVolumeFull",
+      "severity": "critical",
+      "fired_at": "2026-08-31T17:52:00.000Z",
+      "labels": {"pvc": "data-analytics-postgres-0", "namespace": "analytics"}
+    }
+  ],
+  "raw_metrics": {
+    "volume_capacity_bytes": 55834574848,
+    "volume_used_bytes": 55834574848,
+    "volume_used_pct": 100,
+    "wal_segment_count": 812,
+    "wal_retained_gb": 19.4,
+    "failed_writes_last_10m": 3406,
+    "ingest_queue_depth_rows": 1200000,
+    "oldest_pending_event_minutes": 22
+  },
+  "metadata": {
+    "scenario_id": "INC-DISK-4006",
+    "service": "analytics-postgres",
+    "namespace": "analytics",
+    "data_sources": ["logs_traces", "k8s_events", "metrics"],
+    "runbook": "Persistent Volume Disk Exhaustion"
+  }
+}

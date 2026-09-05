@@ -93,6 +93,13 @@ class IncidentState(TypedDict, total=False):
     runbook_learning_attempted: bool
     runbook_learning_file_touched: str
     runbook_learning_similarity_score: float
+
+    # 8. Name-keyed runbook resolution (RCA step)
+    # ``resolve_by_name`` matches the incident title/description against the
+    # display name of ``runbooks/*.md`` files and surfaces the runbook's actual
+    # ``## Solution`` so the final result/notification can cite it verbatim.
+    runbook_name: str
+    runbook_solution: str
     # 10. Guardrails
     # Accumulated (never overwritten) findings from every step guardrail that
     # ran and failed, across every node -- see app/guardrails/.

@@ -7,17 +7,44 @@
   "environment": "PRODUCTION",
   "priority_hint": "P1",
   "tags": ["kubernetes", "auth", "crashloopbackoff", "login"],
-  "timestamp": "2026-08-24T06:31:47+00:00",
- 
-  "events": [
-    {"type": "deployment", "service": "auth-service", "timestamp": "2026-08-24T06:28:00+00:00", "description": "Deployed auth-service v5.2.0 with updated ConfigMap referencing a renamed secret volume mount"},
-    {"type": "config_change", "service": "auth-service", "timestamp": "2026-08-24T06:27:30+00:00", "description": "Secret volume mount path changed from /etc/auth/secrets to /etc/auth/keys in the new Helm values"}
+  "timestamp": "2026-08-24T06:31:47.000Z",
+  "raw_logs": [
+    "2026-08-24T06:28:20.000Z INFO  [deploy-controller] rollout auth-service v5.2.0 started (ConfigMap with renamed secret volume mount)",
+    "2026-08-24T06:29:02.400Z ERROR [auth-service] FileNotFoundException: /etc/auth/keys/keycloak.pem (No such file or directory) — startup aborted",
+    "2026-08-24T06:29:15.100Z WARN  [kubelet] Pod auth-service-6f8b4-3 container auth: restarting, exitCode=1, reason=Error",
+    "2026-08-24T06:29:58.700Z ERROR [kubelet] Back-off restarting failed container auth in pod auth-service-6f8b4-3 (crash count 9, back-off 5m0s)",
+    "2026-08-24T06:30:41.300Z ERROR [auth-service] Spring Boot startup failed: required secret volume mount path /etc/auth/keys is missing (expected /etc/auth/secrets)",
+    "2026-08-24T06:31:12.900Z ERROR [lb-auth] zero healthy endpoints for service auth-service: login/token-refresh requests failing 100%"
   ],
-  "alerts": [
-    {"name": "PodCrashLoopBackOff", "severity": "critical", "fired_at": "2026-08-24T06:30:00+00:00"},
-    {"name": "AuthServiceZeroHealthyEndpoints", "severity": "critical", "fired_at": "2026-08-24T06:31:00+00:00"}
+  "raw_events": [
+    {
+      "type": "deployment",
+      "service": "auth-service",
+      "timestamp": "2026-08-24T06:28:00.000Z",
+      "description": "Deployed auth-service v5.2.0 with updated ConfigMap referencing a renamed secret volume mount"
+    },
+    {
+      "type": "config_change",
+      "service": "auth-service",
+      "timestamp": "2026-08-24T06:27:30.000Z",
+      "description": "Secret volume mount path changed from /etc/auth/secrets to /etc/auth/keys in the new Helm values"
+    }
   ],
-  "metrics": {
+  "raw_alerts": [
+    {
+      "alert_name": "PodCrashLoopBackOff",
+      "severity": "critical",
+      "fired_at": "2026-08-24T06:30:00.000Z",
+      "labels": {"service": "auth-service", "namespace": "auth"}
+    },
+    {
+      "alert_name": "AuthServiceZeroHealthyEndpoints",
+      "severity": "critical",
+      "fired_at": "2026-08-24T06:31:00.000Z",
+      "labels": {"service": "auth-service", "namespace": "auth"}
+    }
+  ],
+  "raw_metrics": {
     "pods_desired": 4,
     "pods_ready": 0,
     "pods_crashloopbackoff": 4,
@@ -25,8 +52,12 @@
     "login_error_rate_pct": 100
   },
   "metadata": {
-    "cluster": "prod-ap-southeast-2",
+    "scenario_id": "INC-K8S-2091",
+    "service": "auth-service",
     "namespace": "auth",
-    "on_call_team": "PLATFORM"
+    "cluster": "prod-ap-southeast-2",
+    "pod_prefix": "auth-service",
+    "data_sources": ["k8s_events", "logs_traces", "metrics"],
+    "runbook": "Pod CrashLoopBackOff (Configuration Error)"
   }
 }

@@ -1,0 +1,61 @@
+{
+  "incident_id": "INC-006",
+  "title": "Database Connection Failure on checkout-db",
+  "description": "checkout-service cannot acquire a connection from the primary database (checkout-db) and customers see 'unable to complete order'. Connection acquisition attempts time out and the connection pool saturates at 100% under sustained checkout load.",
+  "source": "mock",
+  "service": "checkout-service",
+  "environment": "PRODUCTION",
+  "priority_hint": "P1",
+  "tags": [
+    "database",
+    "connection",
+    "failure",
+    "checkout",
+    "pool"
+  ],
+  "timestamp": "2026-08-06T10:20:00.000Z",
+  "raw_logs": [
+    "2026-08-06T10:18:02.100Z ERROR [checkout-service] Timed out waiting for database connection pool 'HikariPool-1' after 30000ms",
+    "2026-08-06T10:18:35.400Z ERROR [checkout-db-pool] connection acquisition wait time p95=29000ms approaching timeout 30000ms",
+    "2026-08-06T10:19:10.900Z ERROR [checkout-service] SQLTransientConnectionException: HikariPool-1 - Connection is not available, request timed out after 30000ms",
+    "2026-08-06T10:19:48.200Z ERROR [checkout-db-pool] active=50 idle=0 waiting=34 utilization=100% threads_blocked=34",
+    "2026-08-06T10:20:05.600Z WARN  [checkout-service] retrying order placement after connection timeout, attempt 3 of 5",
+    "2026-08-06T10:20:41.300Z ERROR [checkout-service] order submission failed for cart session cart-9f82e1: unable to acquire connection within timeout"
+  ],
+  "raw_events": [
+    {
+      "type": "deployment",
+      "service": "checkout-service",
+      "timestamp": "2026-08-06T10:02:00.000Z",
+      "description": "Rolled out checkout-service v2.4.1 (raised default query timeout)"
+    },
+    {
+      "type": "traffic_spike",
+      "service": "checkout-service",
+      "timestamp": "2026-08-06T10:15:00.000Z",
+      "description": "Checkout request rate 4x above 7-day baseline (flash sale campaign)"
+    }
+  ],
+  "raw_alerts": [
+    {
+      "alert_name": "DatabaseConnectionPoolExhausted",
+      "severity": "critical",
+      "fired_at": "2026-08-06T10:20:00.000Z",
+      "labels": {"service": "checkout-service", "namespace": "prod"}
+    }
+  ],
+  "raw_metrics": {
+    "db_pool_active_connections": 50,
+    "db_pool_max_connections": 50,
+    "db_pool_wait_queue_depth": 34,
+    "checkout_error_rate_pct": 29.0,
+    "p95_latency_ms": 2850
+  },
+  "metadata": {
+    "scenario_id": "INC-006",
+    "service": "checkout-service",
+    "namespace": "prod",
+    "data_sources": ["db_logs", "logs_traces", "metrics"],
+    "runbook": "Database Connection Pool Exhausted"
+  }
+}

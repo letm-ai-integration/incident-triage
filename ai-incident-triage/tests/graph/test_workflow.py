@@ -159,10 +159,10 @@ def test_route_after_verification_reinvestigates_then_completes():
 
 
 def test_unresolved_incident_loops_then_terminates_unresolved():
-    """ImagePullBackOff sample has no corroborating telemetry -> verification
+    """Telemetry-gap sample has no corroborating signal -> verification
     fails -> reinvestigation loop bounded by MAX_INVESTIGATION_RETRIES ->
     terminates at notification with an unresolved outcome."""
-    result = _run(_load("imagepullbackoff.json"))
+    result = _run(_load("telemetry-gap.json"))
     assert result["is_resolved"] is False
     assert result["investigation_status"] == IncidentStatus.UNRESOLVED
     assert result["retry_count"] > 0  # loop actually ran

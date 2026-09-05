@@ -1,8 +1,9 @@
 """CLI entry point for the incident-triage pipeline.
 
 This is a thin shell over the LangGraph workflow: it loads an incident JSON
-file, invokes ``app.graph.workflow.triage_graph`` as the single orchestration
-entry point, and prints the result. No triage logic lives here.
+file, streams it through ``app.graph.workflow.stream_triage_graph`` (the same
+single orchestration entry point the UI uses), and prints the result. No triage
+logic lives here.
 
 Usage:
 
@@ -15,13 +16,13 @@ fallbacks run, so the CLI is fully offline-safe by default.
 from __future__ import annotations
 
 import json
-import logging
 from pathlib import Path
 from typing import Any
 
 import typer
 
-from app.graph.workflow import triage_graph
+from app.config import get_settings
+from app.graph.workflow import stream_triage_graph
 from app.services.classification_service import classification_service
 from app.services.investigation_service import investigation_service
 from app.services.notification_service import notification_service
@@ -31,8 +32,6 @@ app = typer.Typer(
     add_completion=False,
     help="Run an incident JSON file through the triage LangGraph pipeline.",
 )
-
-RECURSION_LIMIT = 50  # safety net on top of MAX_INVESTIGATION_RETRIES
 
 
 def _load_incident(path: Path) -> dict[str, Any]:
@@ -69,13 +68,6 @@ def triage(
     ),
 ) -> None:
     """Triage ``incident_file`` through the graph and print the result."""
-    from app.config import get_settings
-
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(name)s %(levelname)s %(message)s",
-    )
-
     raw_input = _load_incident(incident_file)
 
     deps: dict[str, Any] = {
@@ -84,21 +76,29 @@ def triage(
         "notification_service": notification_service,
     }
     if use_llm and get_settings().active_llm_config().get("api_key"):
+        deps["use_llm"] = True
         deps["classification_service"] = classification_service
         deps["rca_report_service"] = rca_report_service
 
+    run_id = f"cli-{incident_file.stem}"
     try:
-        result: dict[str, Any] = triage_graph.invoke(
-            {"raw_input": raw_input},
-            config={"configurable": {"deps": deps}, "recursion_limit": RECURSION_LIMIT},
-        )
+        stream, bus = stream_triage_graph(raw_input, deps, run_id=run_id)
+        # Drain the stream; events are also accumulated on the bus, so here we
+        # only need to consume the generator to drive the graph to completion.
+        for _ in stream:
+            pass
+        final_state: dict[str, Any] | None = bus.final_state
     except Exception as exc:  # noqa: BLE001 -- CLI boundary: short message, exit 1
         typer.echo(f"error: triage failed: {exc}", err=True)
         raise typer.Exit(code=1)
 
-    incident = result.get("incident")
-    classification = result.get("classification")
-    approval = result.get("approval")
+    if final_state is None:
+        typer.echo("error: triage produced no final state", err=True)
+        raise typer.Exit(code=1)
+
+    incident = final_state.get("incident")
+    classification = final_state.get("classification")
+    approval = final_state.get("approval")
 
     typer.echo("Triage Result")
     typer.echo("=" * 60)
@@ -116,26 +116,32 @@ def triage(
         typer.echo(f"Approval      : {'approved' if approval.approved else 'rejected'}"
                    f" by {approval.reviewer}")
 
-    resolved = result.get("is_resolved")
-    status = result.get("investigation_status")
+    resolved = final_state.get("is_resolved")
+    status = final_state.get("investigation_status")
     typer.echo(f"Resolution    : {'resolved' if resolved else 'unresolved'} ({status})")
 
-    notification_status = result.get("notification_status")
+    runbook_name = final_state.get("runbook_name")
+    runbook_solution = final_state.get("runbook_solution")
+    if runbook_name and runbook_solution:
+        typer.echo(f"Runbook        : A matching runbook was found for \"{runbook_name}\".")
+        typer.echo(f"Runbook Fix    : {runbook_solution}")
+
+    notification_status = final_state.get("notification_status")
     if notification_status is not None and notification_status.value == "NOTIFIED":
-        detail = result.get("notification_detail")
+        detail = final_state.get("notification_detail")
         suffix = f" ({detail})" if detail else ""
         typer.echo(f"Notified stakeholders{suffix}")
     else:
         typer.echo(f"Notification  : {notification_status}")
 
-    if result.get("errors"):
+    if final_state.get("errors"):
         typer.echo("Errors:")
-        for error in result["errors"]:
+        for error in final_state["errors"]:
             typer.echo(f"  - {error}")
 
-    if result.get("guardrail_findings"):
+    if final_state.get("guardrail_findings"):
         typer.echo("Guardrail findings:")
-        for finding in result["guardrail_findings"]:
+        for finding in final_state["guardrail_findings"]:
             typer.echo(f"  - [{finding['node']}/{finding['check']}] {finding['findings']}")
 
 
