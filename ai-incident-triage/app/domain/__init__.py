@@ -4,7 +4,6 @@ from .enums import (
     Environment,
     Team,
     IncidentStatus,
-    ApprovalStatus,
     NotificationStatus,
 )
 
@@ -17,7 +16,6 @@ from .models import (
     HypothesisLabel,
     RootCauseAnalysis,
     TimelineEvent,
-    ApprovalDecision,
     VerificationResult,
     IncidentReport,
     RunbookReference,
@@ -30,9 +28,8 @@ __all__ = [
     "Environment",
     "Team",
     "IncidentStatus",
-    "ApprovalStatus",
     "NotificationStatus",
-    
+
     # Models
     "Incident",
     "ClassificationResult",
@@ -42,7 +39,6 @@ __all__ = [
     "HypothesisLabel",
     "RootCauseAnalysis",
     "TimelineEvent",
-    "ApprovalDecision",
     "VerificationResult",
     "IncidentReport",
     "RunbookReference",
