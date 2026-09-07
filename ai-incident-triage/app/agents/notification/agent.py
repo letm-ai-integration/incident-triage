@@ -9,7 +9,6 @@ fields; delivery happens via the thin Resend adapter (``tools/adapters``).
 from __future__ import annotations
 
 import logging
-
 from dataclasses import dataclass
 
 from app.agents.notification.parser import (
@@ -21,7 +20,7 @@ from app.domain.models.report import IncidentReport
 from app.guardrails.safety_guard import check_content_safety
 from app.guardrails.sanitize import sanitize_html_email_body
 from app.llm.client import create_structured_agent
-from app.logging_utils import agent_entry, agent_output, agent_exit, agent_error
+from app.logging_utils import agent_entry, agent_error, agent_exit, agent_output
 from app.tools.adapters.resend_email import EmailSendError, send_email
 from app.tools.mock.oncall import get_current_oncall
 
@@ -54,21 +53,175 @@ def _draft_email_llm(rca_report: IncidentReport, contact, model: str | None) -> 
 
 
 def _draft_email_template(rca_report: IncidentReport) -> NotificationEmail:
-    """Deterministic fallback draft built from the report's own fields."""
+    """Deterministic fallback draft built from the report's own fields.
+
+    Renders the full Phase 5 canonical template (all nine sections, in order)
+    from already-validated report fields only -- environment and priority come
+    from the incident's own values, never invented. This pipeline only
+    investigates and recommends, so the email never claims a fix was applied
+    unless the report's verification says recovery was validated.
+    """
     subject = (
         f"[{rca_report.classification.priority.value}] "
         f"{rca_report.incident_id} - RCA report"
     )
+    if not rca_report.verification.is_resolved:
+        subject += " (remediation pending)"
+    classification = rca_report.classification
+    root_cause = rca_report.root_cause
+    from app.domain.models.hypothesis import HypothesisLabel
+    from app.services.rca_report_service import (
+        _observed_findings,
+        remediation_status,
+        root_cause_determination,
+        root_cause_state_short,
+    )
+
+    # --- Incident Overview -------------------------------------------------
+    services = ", ".join(classification.affected_services) or "(not established)"
+    observed = _observed_findings(rca_report.evidence)
+    observed_text = (
+        "; ".join(observed)
+        if observed
+        else "None independently observed -- no telemetry-backed finding was established."
+    )
+    overview = (
+        f"<p><b>Incident:</b> {rca_report.incident_id}.</p>"
+        f"<p><b>Affected service(s):</b> {services}.</p>"
+        "<p><b>Triggering condition:</b> "
+        f"{classification.reasoning or '(not established)'}.</p>"
+        "<p><b>Reported trigger (from the source system):</b> "
+        f"{rca_report.incident_description or '(none supplied)'}.</p>"
+        f"<p><b>Independently observed via telemetry:</b> {observed_text}.</p>"
+        "<p><b>Summary:</b> "
+        f"{rca_report.incident_title or rca_report.incident_id} -- the "
+        "investigation above could not be taken further without external "
+        "recovery/remediation evidence (this pipeline is investigate-and-recommend only).</p>"
+    )
+
+    # --- Environment (incident's own value; the template uses lowercase tokens) ---
+    environment = (rca_report.environment or "").strip().lower() or "not reported by the source system"
+
+    # --- Impacted Services (severity = the incident's actual P1-P4 priority) ---
+    service_rows = list(classification.affected_services) or ["Unknown / not established"]
+    rows = []
+    for service in service_rows:
+        mentions = [e.finding for e in rca_report.evidence.items if service in e.finding]
+        impact = (
+            "; ".join(mentions[:2])
+            if mentions
+            else "Reported in the incident description; no independent telemetry observed."
+        )
+        rows.append(
+            f"<tr><td>{service}</td><td>{classification.priority.value}</td><td>{impact}</td></tr>"
+        )
+    impacted_services = (
+        "<table><thead><tr><th>Service</th><th>Severity / Role</th><th>Impact</th></tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody></table>"
+    )
+
+    # --- Impact Assessment (only what was actually observed) ---------------
+    if observed:
+        impact_assessment = (
+            "<p>The following impact was observed in monitored/logged telemetry:</p>"
+            f"<ul>{''.join(f'<li>{o}</li>' for o in observed)}</ul>"
+        )
+    else:
+        impact_assessment = (
+            "<p>Impact could not be independently established from available "
+            "telemetry; no monitored/logged error behavior, delay, or "
+            "freshness signal was observed.</p>"
+        )
+
+    # --- Investigation Findings (every bullet traces to an evidence item) ---
+    finding_items = []
+    for item in rca_report.evidence.items:
+        finding_items.append(
+            f"<li><b>{item.source}</b> ({item.severity}, "
+            f"<i>{item.provenance.value}</i>): {item.finding} "
+            f"(evidence: <b>{item.evidence_id}</b>)</li>"
+        )
+    for checkpoint in root_cause.claim_validation:
+        if not checkpoint.supported:
+            finding_items.append(
+                "<li>Claim not independently verified "
+                f"({checkpoint.category.value}): {checkpoint.claim} -- "
+                f"{checkpoint.qualifier or 'unable to verify from observed telemetry'}</li>"
+            )
+    if not finding_items:
+        finding_items.append("<li>(no evidence collected -- see Impact Assessment)</li>")
+    investigation_findings = f"<ol>{''.join(finding_items)}</ol>"
+
+    # --- Root Cause Analysis (exact state + contributing factors only) -----
+    factor_items = [
+        f"<li>{h.description}</li>"
+        for h in root_cause.contributing_factors
+        if h.label != HypothesisLabel.UNLIKELY
+    ]
+    contributing = "None identified" if not factor_items else f"<ul>{''.join(factor_items)}</ul>"
+
+    # --- Recommended Remediation (runbook status + runbook/no-runbook arms) ---
+    if rca_report.runbook_references:
+        steps = rca_report.recommended_actions or [
+            f"Follow runbook: {ref.title}" for ref in rca_report.runbook_references
+        ]
+        remediation_section = (
+            "<p><b>Runbook Status:</b> Applicable runbook found</p>"
+            "<p><b>When an Applicable Runbook Is Available:</b></p>"
+            f"<ol>{''.join(f'<li>{step}</li>' for step in steps)}</ol>"
+        )
+    else:
+        remediation_section = (
+            "<p><b>Runbook Status:</b> No applicable runbook found</p>"
+            "<p><b>When No Applicable Runbook Is Available:</b></p>"
+            "<blockquote><p><b>Runbook remediation unavailable:</b> No "
+            "applicable runbook or validated remediation procedure was found. "
+            "The investigation has identified the observed symptoms and "
+            "available evidence, but a validated remediation path is not "
+            "available. <b>On-call engineering action is required to determine, "
+            "apply, and validate the appropriate fix.</b></p></blockquote>"
+        )
+    if rca_report.recommended_actions:
+        remediation_section += (
+            "<p><b>Recommended next actions (analysis only, not yet executed):</b></p>"
+            f"<ul>{''.join(f'<li>{a}</li>' for a in rca_report.recommended_actions)}</ul>"
+        )
+
+    # --- Investigation Status (rule 6: completed != resolved) --------------
+    investigation_status = (
+        "<ul>"
+        "<li><b>Investigation:</b> Completed</li>"
+        f"<li><b>Root-Cause Analysis:</b> {root_cause_state_short(root_cause)}</li>"
+        f"<li><b>Remediation:</b> {remediation_status(rca_report)}</li>"
+        "</ul>"
+    )
+    important_note = (
+        "<blockquote><p><b>Important:</b> This investigation is limited to "
+        "analysis and recommendation unless explicitly stated otherwise. No "
+        "remediation should be considered applied unless there is evidence "
+        "the change was actually executed and validated.</p></blockquote>"
+    )
+
     body = (
-        f"<h2>Incident {rca_report.incident_id} - RCA Report</h2>"
-        f"<p><b>Type:</b> {rca_report.classification.incident_type.value}</p>"
-        f"<p><b>Affected services:</b> "
-        f"{', '.join(rca_report.classification.affected_services) or 'n/a'}</p>"
-        f"<p><b>Root cause:</b> {rca_report.root_cause.primary_cause.description}</p>"
-        f"<p><b>Recommended actions:</b></p>"
-        f"<ul>"
-        + "".join(f"<li>{action}</li>" for action in rca_report.recommended_actions)
-        + "</ul>"
+        "<h2>Incident Summary</h2>"
+        "<h3>Incident Overview</h3>"
+        f"{overview}"
+        "<h3>Environment</h3>"
+        f"<p><b>Environment:</b> {environment}</p>"
+        "<h3>Impacted Services</h3>"
+        f"{impacted_services}"
+        "<h3>Impact Assessment</h3>"
+        f"{impact_assessment}"
+        "<h3>Investigation Findings</h3>"
+        f"{investigation_findings}"
+        "<h3>Root Cause Analysis</h3>"
+        f"<p><b>Root Cause:</b> {root_cause_determination(root_cause)}</p>"
+        f"<p><b>Contributing Factors:</b> {contributing}</p>"
+        "<h3>Recommended Remediation</h3>"
+        f"{remediation_section}"
+        "<h3>Investigation Status</h3>"
+        f"{investigation_status}"
+        f"{important_note}"
     )
     return NotificationEmail(subject=subject, body=body)
 

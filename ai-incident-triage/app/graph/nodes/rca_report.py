@@ -2,8 +2,7 @@
 # report. Merges the former v1 rca and report nodes.
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from langchain_core.runnables import RunnableConfig
 
@@ -18,9 +17,11 @@ from app.domain.models.root_cause import RootCauseAnalysis, TimelineEvent
 from app.domain.models.verification import VerificationResult
 from app.graph.builder import get_deps
 from app.graph.state import IncidentState
+from app.services.evidence_service import validate_hypotheses
+from app.services.hypothesis_service import finalize_root_cause
 
 
-def rca_report_node(state: IncidentState, config: Optional[RunnableConfig] = None) -> dict:
+def rca_report_node(state: IncidentState, config: RunnableConfig | None = None) -> dict:
     """Write the ``RootCauseAnalysis`` and the draft ``IncidentReport``."""
     deps = get_deps(config)
     service = deps.get("rca_report_service", _default_rca_report)
@@ -33,12 +34,20 @@ def rca_report_node(state: IncidentState, config: Optional[RunnableConfig] = Non
 
 
 def _default_rca_report(state: IncidentState, deps: dict) -> dict:
-    """Fallback RCA: pick the top hypothesis as the primary cause and draft the report."""
+    """Fallback RCA: pick the top hypothesis as the primary cause and draft the report.
+
+    Runs the Phase 3 deterministic claim validation before finalization: any
+    hypothesis claim not backed by collected telemetry is downgraded (confidence
+    penalty + wording qualifier) and the RCA confidence is capped by the shared
+    deterministic ceiling, so the report never presents an unsupported claim as
+    a confirmed root cause.
+    """
     incident = state.get("incident")
     incident_id = state.get("incident_id") or (incident.incident_id if incident else "UNKNOWN")
     classification = _reconstruct_classification(state)
     evidence = state.get("evidence", [])
     hypotheses = state.get("hypotheses", [])
+    findings = validate_hypotheses(incident, evidence, hypotheses)
     top = max(hypotheses, key=lambda h: h.confidence) if hypotheses else _fallback_hypothesis()
     summary = state.get("investigation_summary") or {}
 
@@ -51,6 +60,13 @@ def _default_rca_report(state: IncidentState, deps: dict) -> dict:
             list(classification.affected_services) if classification.affected_services else []
         ),
     )
+    if hypotheses:
+        # Claims to validate only exist when the investigation produced
+        # hypotheses. The no-hypotheses fallback path keeps its pre-Phase-3
+        # semantics: with nothing to ground, nothing is downgraded.
+        root_cause = finalize_root_cause(root_cause, findings, hypotheses)
+    else:
+        root_cause = root_cause.model_copy(update={"claim_validation": findings})
 
     expected_outcome = {
         "expectation": f"Incident resolved by addressing '{top.description}'.",
@@ -85,7 +101,10 @@ def _default_rca_report(state: IncidentState, deps: dict) -> dict:
         recommended_actions=_recommended_actions(expected_outcome, runbook_references),
         runbook_references=runbook_references,
         verification=VerificationResult(is_resolved=False, needs_reinvestigation=True),
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        incident_title=incident.title if incident else None,
+        incident_description=incident.description if incident else None,
+        environment=incident.environment.value if incident else None,
     )
 
     return {
@@ -93,6 +112,7 @@ def _default_rca_report(state: IncidentState, deps: dict) -> dict:
         "rca_confidence": root_cause.confidence_score,
         "incident_report": report,
         "expected_outcome": expected_outcome,
+        "claim_validation": findings,
     }
 
 

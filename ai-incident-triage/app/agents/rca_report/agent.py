@@ -18,6 +18,7 @@ from app.agents.rca_report.parser import parse_rca_response
 from app.agents.rca_report.prompt import SYSTEM_PROMPT, build_user_prompt
 from app.domain.models.classification import ClassificationResult
 from app.domain.models.evidence import EvidenceCollection
+from app.domain.enums.provenance import EvidenceProvenance
 from app.domain.models.hypothesis import Hypothesis
 from app.domain.models.incident import Incident
 from app.domain.models.root_cause import RootCauseAnalysis
@@ -95,4 +96,18 @@ def generate_root_cause_analysis(
 
 
 def _reconcile_with_ceiling(rca: RootCauseAnalysis, ceiling: float) -> RootCauseAnalysis:
-    return rca.model_copy(update={"confidence_score": min(rca.confidence_score, ceiling)})
+    capped = rca.model_copy(update={"confidence_score": min(rca.confidence_score, ceiling)})
+    # Deterministic grounding rule: an RCA cause/contributing factor is by
+    # definition an INFERRED conclusion -- never claim it is observed telemetry,
+    # no matter what the LLM wrote.
+    return capped.model_copy(
+        update={
+            "primary_cause": capped.primary_cause.model_copy(
+                update={"provenance": EvidenceProvenance.INFERRED}
+            ),
+            "contributing_factors": [
+                f.model_copy(update={"provenance": EvidenceProvenance.INFERRED})
+                for f in capped.contributing_factors
+            ],
+        }
+    )

@@ -1,0 +1,55 @@
+{
+  "incident_id": "INC-KAFKA-5002",
+  "title": "Kafka consumer lag / delayed processing",
+  "description": "The order-event-consumer cannot keep up on partition 3: group lag reached 24,180 messages with producer rate 286 msg/s vs consumer throughput 112 msg/s and per-message processing latency 2.6-5.0s. Lag and the throughput imbalance are directly observed; it is not proven that adding consumers alone resolves it if per-message processing time is the true bottleneck.",
+  "source": "mock",
+  "service": "order-event-consumer",
+  "environment": "PRODUCTION",
+  "priority_hint": "P2",
+  "tags": [
+    "kafka",
+    "consumer-lag",
+    "delayed-processing",
+    "throughput"
+  ],
+  "timestamp": "2026-09-04T14:32:00.000Z",
+  "raw_logs": [
+    "{\"timestamp\": \"2026-09-04T14:31:41.220Z\", \"sequence\": 60201, \"level\": \"INFO\", \"loggerName\": \"com.mockcorp.commerce.ordereventconsumer.app.kafka.OrderEventConsumer\", \"message\": \"partition=3 pollBatch=500 processingTime=1840ms\", \"threadName\": \"consumer-3\", \"threadId\": 21, \"IMAGE_TAG\": \"1.4.0\", \"environment\": \"production\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\"}",
+    "{\"timestamp\": \"2026-09-04T14:31:52.904Z\", \"sequence\": 60202, \"level\": \"WARN\", \"loggerName\": \"com.mockcorp.commerce.ordereventconsumer.app.kafka.OrderEventConsumer\", \"message\": \"partition=3 processingTime=2670ms threshold=2000ms\", \"threadName\": \"consumer-3\", \"threadId\": 21, \"IMAGE_TAG\": \"1.4.0\", \"environment\": \"production\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\"}",
+    "{\"timestamp\": \"2026-09-04T14:32:03.117Z\", \"sequence\": 60203, \"level\": \"WARN\", \"loggerName\": \"org.apache.kafka.clients.consumer\", \"message\": \"kafka consumer_group=order-events groupLag=18420 partition=3\", \"threadName\": \"consumer-3\", \"threadId\": 22, \"IMAGE_TAG\": \"1.4.0\", \"environment\": \"production\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\"}",
+    "{\"timestamp\": \"2026-09-04T14:32:19.481Z\", \"sequence\": 60204, \"level\": \"ERROR\", \"loggerName\": \"com.mockcorp.commerce.ordereventconsumer.app.kafka.OrderEventConsumer\", \"message\": \"message processing timeout orderId=ORD-78421 elapsed=5.04s\", \"threadName\": \"consumer-3\", \"threadId\": 21, \"IMAGE_TAG\": \"1.4.0\", \"environment\": \"production\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\"}",
+    "{\"timestamp\": \"2026-09-04T14:32:31.605Z\", \"sequence\": 60205, \"level\": \"WARN\", \"loggerName\": \"org.apache.kafka.clients.consumer\", \"message\": \"kafka consumer_group=order-events groupLag=24180 partition=3\", \"threadName\": \"consumer-3\", \"threadId\": 22, \"IMAGE_TAG\": \"1.4.0\", \"environment\": \"production\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\"}",
+    "{\"timestamp\": \"2026-09-04T14:33:02.301Z\", \"sequence\": 60206, \"level\": \"WARN\", \"loggerName\": \"com.mockcorp.commerce.ordereventconsumer.app.kafka.OrderEventConsumer\", \"message\": \"throughput=112msg/s producerRate=286msg/s\", \"threadName\": \"consumer-3\", \"threadId\": 21, \"IMAGE_TAG\": \"1.4.0\", \"environment\": \"production\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\"}",
+    "{\"timestamp\": \"2026-09-04T14:33:26.904Z\", \"sequence\": 60207, \"level\": \"ERROR\", \"loggerName\": \"com.mockcorp.commerce.ordereventconsumer.app.kafka.OrderEventConsumer\", \"message\": \"commit delayed partition=3 reason=\\\"processing batch exceeded max.poll.interval\\\"\", \"threadName\": \"consumer-3\", \"threadId\": 21, \"IMAGE_TAG\": \"1.4.0\", \"environment\": \"production\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\"}"
+  ],
+  "raw_events": [],
+  "raw_alerts": [
+    {
+      "alert_name": "KafkaConsumerGroupLag",
+      "severity": "warning",
+      "fired_at": "2026-09-04T14:32:00.000Z",
+      "labels": {
+        "service": "order-event-consumer",
+        "namespace": "prod"
+      }
+    }
+  ],
+  "raw_metrics": {
+    "consumer_lag_msgs": 24180,
+    "producer_rate_msg_per_s": 286,
+    "consumer_throughput_msg_per_s": 112,
+    "processing_latency_s": 5.0,
+    "affected_partition": 3,
+    "pod_restarts": 0
+  },
+  "metadata": {
+    "scenario_id": "INC-KAFKA-5002",
+    "service": "order-event-consumer",
+    "namespace": "prod",
+    "data_sources": [
+      "logs_traces",
+      "metrics"
+    ],
+    "runbook": "Kafka Consumer Lag Remediation"
+  }
+}

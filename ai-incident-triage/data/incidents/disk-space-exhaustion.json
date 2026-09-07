@@ -1,0 +1,56 @@
+{
+  "incident_id": "INC-DISK-5010",
+  "title": "Disk space exhaustion on a persistent volume",
+  "description": "The order-history-service Postgres PVC is at 99.4% of 100Gi and the database cannot write WAL segments, entering read-only recovery mode. The 99.4% figure and write failures are directly observed; the audit_log/WAL-retention growth attribution is inferred from a 14-day trend, not independently isolated here.",
+  "source": "mock",
+  "service": "order-history-service",
+  "environment": "PRODUCTION",
+  "priority_hint": "P2",
+  "tags": [
+    "disk",
+    "storage",
+    "pvc",
+    "database"
+  ],
+  "timestamp": "2026-08-31T20:05:44.000Z",
+  "raw_logs": [
+    "{\"timestamp\": \"2026-08-31T20:05:44.552198Z\", \"sequence\": 30411, \"level\": \"ERROR\", \"loggerName\": \"com.mockcorp.commerce.orderhistoryservice.app.repository.OrderWriteRepository\", \"message\": \"could not write to file \\\"pg_wal/000000010000000000000042\\\": No space left on device\", \"threadName\": \"executor-thread-4\", \"threadId\": 57, \"IMAGE_TAG\": \"2.9.3\", \"environment\": \"production\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\"}",
+    "{\"timestamp\": \"2026-08-31T20:05:44.601872Z\", \"sequence\": 30412, \"level\": \"ERROR\", \"loggerName\": \"com.mockcorp.commerce.orderhistoryservice.app.repository.OrderWriteRepository\", \"message\": \"PANIC: could not write to log file due to insufficient disk space, database entering read-only recovery mode\", \"threadName\": \"executor-thread-4\", \"threadId\": 57, \"IMAGE_TAG\": \"2.9.3\", \"environment\": \"production\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\"}"
+  ],
+  "raw_events": [
+    {
+      "type": "Warning",
+      "reason": "FreeDiskSpaceFailed",
+      "object": "persistentvolumeclaim/order-history-pg-data",
+      "message": "Volume usage at 99.4% of 100Gi capacity",
+      "timestamp": "2026-08-31T20:04:30Z"
+    }
+  ],
+  "raw_alerts": [
+    {
+      "alert_name": "FreeDiskSpaceFailed",
+      "severity": "critical",
+      "fired_at": "2026-08-31T20:04:30.000Z",
+      "labels": {
+        "service": "order-history-service",
+        "namespace": "prod"
+      }
+    }
+  ],
+  "raw_metrics": {
+    "pvc_capacity_gb": 100,
+    "pvc_used_pct": 99.4,
+    "pvc_growth_gb_per_day": 2.1
+  },
+  "metadata": {
+    "scenario_id": "INC-DISK-5010",
+    "service": "order-history-service",
+    "namespace": "prod",
+    "data_sources": [
+      "db_logs",
+      "k8s_logs",
+      "metrics"
+    ],
+    "runbook": "Disk Space Exhaustion Remediation"
+  }
+}

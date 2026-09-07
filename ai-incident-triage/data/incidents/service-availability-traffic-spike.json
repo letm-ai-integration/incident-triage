@@ -1,0 +1,59 @@
+{
+  "incident_id": "INC-AVAIL-5001",
+  "title": "Service availability below 100% during traffic spike",
+  "description": "A sudden traffic increase exceeds current replica/connection capacity: request rate reached 2310rpm vs a ~1400rpm baseline, active connections hit 498/500, HTTP 503s rose to 2.1%, p95 latency 4.9s and availability dropped to 98.7% while HPA scaling lagged behind (6 replicas now, 10 desired). Reduced availability, elevated traffic, connection saturation and delayed scaling are directly observed; it is not proven that a restart is required or that timeouts alone would have prevented this.",
+  "source": "mock",
+  "service": "checkout-service",
+  "environment": "PRODUCTION",
+  "priority_hint": "P1",
+  "tags": [
+    "availability",
+    "traffic-spike",
+    "scaling",
+    "latency"
+  ],
+  "timestamp": "2026-09-04T10:15:00.000Z",
+  "raw_logs": [
+    "{\"timestamp\": \"2026-09-04T10:14:32.118Z\", \"sequence\": 50101, \"level\": \"INFO\", \"loggerName\": \"com.mockcorp.commerce.checkoutservice.app.monitoring.TrafficMonitor\", \"message\": \"request_rate=1480rpm replicas=6 target=900rpm\", \"threadName\": \"executor-thread-1\", \"threadId\": 90, \"IMAGE_TAG\": \"7.3.0\", \"environment\": \"production\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\"}",
+    "{\"timestamp\": \"2026-09-04T10:14:48.402Z\", \"sequence\": 50102, \"level\": \"WARN\", \"loggerName\": \"com.mockcorp.commerce.checkoutservice.app.transport.HttpServer\", \"message\": \"request_queue_depth=186 active_connections=498 max_connections=500\", \"threadName\": \"executor-thread-1\", \"threadId\": 91, \"IMAGE_TAG\": \"7.3.0\", \"environment\": \"production\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\"}",
+    "{\"timestamp\": \"2026-09-04T10:14:57.921Z\", \"sequence\": 50103, \"level\": \"WARN\", \"loggerName\": \"com.mockcorp.commerce.checkoutservice.app.monitoring.ReadinessProbe\", \"message\": \"readiness probe latency=2.8s threshold=2s pod=checkout-service-7f8d9c6d7b-k2m4p\", \"threadName\": \"executor-thread-1\", \"threadId\": 92, \"IMAGE_TAG\": \"7.3.0\", \"environment\": \"production\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\"}",
+    "{\"timestamp\": \"2026-09-04T10:15:03.107Z\", \"sequence\": 50104, \"level\": \"WARN\", \"loggerName\": \"k8s.io.autoscaler.horizontalpodautoscaler\", \"message\": \"hpa/checkout-service desiredReplicas=10 currentReplicas=6 reason=cpu-utilization-above-target\", \"threadName\": \"hpa-controller\", \"threadId\": 3, \"IMAGE_TAG\": \"7.3.0\", \"environment\": \"production\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\"}",
+    "{\"timestamp\": \"2026-09-04T10:15:07.441Z\", \"sequence\": 50105, \"level\": \"ERROR\", \"loggerName\": \"com.mockcorp.commerce.checkoutservice.app.transport.HttpServer\", \"message\": \"upstream request rejected status=503 reason=\\\"connection pool exhausted\\\"\", \"threadName\": \"executor-thread-1\", \"threadId\": 93, \"IMAGE_TAG\": \"7.3.0\", \"environment\": \"production\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\"}",
+    "{\"timestamp\": \"2026-09-04T10:15:12.883Z\", \"sequence\": 50106, \"level\": \"WARN\", \"loggerName\": \"kubelet\", \"message\": \"readiness probe failed consecutiveFailures=3 pod=checkout-service-7f8d9c6d7b-p9x7q\", \"threadName\": \"kubelet\", \"threadId\": 4, \"IMAGE_TAG\": \"7.3.0\", \"environment\": \"production\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\"}",
+    "{\"timestamp\": \"2026-09-04T10:15:20.204Z\", \"sequence\": 50107, \"level\": \"INFO\", \"loggerName\": \"k8s.io.autoscaler.horizontalpodautoscaler\", \"message\": \"hpa/checkout-service scaling currentReplicas=6 desiredReplicas=10\", \"threadName\": \"hpa-controller\", \"threadId\": 3, \"IMAGE_TAG\": \"7.3.0\", \"environment\": \"production\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\"}",
+    "{\"timestamp\": \"2026-09-04T10:15:41.516Z\", \"sequence\": 50108, \"level\": \"ERROR\", \"loggerName\": \"ingress-controller\", \"message\": \"ingress checkout-service status=503 upstream_response_time=5.12s\", \"threadName\": \"ingress-controller\", \"threadId\": 5, \"IMAGE_TAG\": \"7.3.0\", \"environment\": \"production\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\"}",
+    "{\"timestamp\": \"2026-09-04T10:16:03.721Z\", \"sequence\": 50109, \"level\": \"INFO\", \"loggerName\": \"com.mockcorp.commerce.checkoutservice.app.monitoring.TrafficMonitor\", \"message\": \"request_rate=2310rpm replicas=8 availability=98.7%\", \"threadName\": \"executor-thread-1\", \"threadId\": 94, \"IMAGE_TAG\": \"7.3.0\", \"environment\": \"production\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\"}"
+  ],
+  "raw_events": [],
+  "raw_alerts": [
+    {
+      "alert_name": "ServiceAvailabilityLow",
+      "severity": "critical",
+      "fired_at": "2026-09-04T10:15:00.000Z",
+      "labels": {
+        "service": "checkout-service",
+        "namespace": "prod"
+      }
+    }
+  ],
+  "raw_metrics": {
+    "availability_pct": 98.7,
+    "request_rate_rpm": 2310,
+    "replicas": 8,
+    "desired_replicas": 10,
+    "active_connections": 498,
+    "max_connections": 500,
+    "http_503_rate_pct": 2.1,
+    "p95_latency_ms": 4900
+  },
+  "metadata": {
+    "scenario_id": "INC-AVAIL-5001",
+    "service": "checkout-service",
+    "namespace": "prod",
+    "data_sources": [
+      "logs_traces",
+      "metrics"
+    ],
+    "runbook": "Service Availability / Traffic Spike Remediation"
+  }
+}

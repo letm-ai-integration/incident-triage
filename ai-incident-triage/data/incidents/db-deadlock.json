@@ -1,0 +1,57 @@
+{
+  "incident_id": "INC-DB-5003",
+  "title": "Database deadlock causing transaction failures",
+  "description": "Payment transactions are rolling back because Postgres detects deadlocks: 37 in 5 minutes, transaction error rate 3.8% vs a 0.2% baseline, DB CPU 61%, connections 72/150, zero app pod restarts. Deadlocks and rollbacks are directly observed in logs; the exact application code path responsible for the lock-order inversion is not proven here and requires further verification.",
+  "source": "mock",
+  "service": "payment-service",
+  "environment": "PRODUCTION",
+  "priority_hint": "P1",
+  "tags": [
+    "database",
+    "deadlock",
+    "transaction",
+    "rollback"
+  ],
+  "timestamp": "2026-09-04T16:48:00.000Z",
+  "raw_logs": [
+    "{\"timestamp\": \"2026-09-04T16:47:42.104Z\", \"sequence\": 70101, \"level\": \"INFO\", \"loggerName\": \"com.mockcorp.commerce.paymentservice.app.transaction.PaymentService\", \"message\": \"transaction=tx-81244 status=BEGIN account=ACC-2201\", \"threadName\": \"executor-thread-1\", \"threadId\": 80, \"IMAGE_TAG\": \"5.1.1\", \"environment\": \"production\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\"}",
+    "{\"timestamp\": \"2026-09-04T16:47:42.441Z\", \"sequence\": 70102, \"level\": \"INFO\", \"loggerName\": \"com.mockcorp.commerce.paymentservice.app.transaction.PaymentService\", \"message\": \"transaction=tx-81245 status=BEGIN account=ACC-2202\", \"threadName\": \"executor-thread-1\", \"threadId\": 80, \"IMAGE_TAG\": \"5.1.1\", \"environment\": \"production\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\"}",
+    "{\"timestamp\": \"2026-09-04T16:47:43.006Z\", \"sequence\": 70103, \"level\": \"ERROR\", \"loggerName\": \"org.postgresql.core.QueryExecutor\", \"message\": \"postgres deadlock detected transaction=tx-81244\", \"threadName\": \"executor-thread-1\", \"threadId\": 80, \"IMAGE_TAG\": \"5.1.1\", \"environment\": \"production\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\"}",
+    "{\"timestamp\": \"2026-09-04T16:47:43.011Z\", \"sequence\": 70104, \"level\": \"WARN\", \"loggerName\": \"com.mockcorp.commerce.paymentservice.app.transaction.PaymentService\", \"message\": \"transaction=tx-81244 rollback reason=\\\"deadlock detected\\\"\", \"threadName\": \"executor-thread-1\", \"threadId\": 80, \"IMAGE_TAG\": \"5.1.1\", \"environment\": \"production\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\"}",
+    "{\"timestamp\": \"2026-09-04T16:47:43.287Z\", \"sequence\": 70105, \"level\": \"ERROR\", \"loggerName\": \"org.postgresql.core.QueryExecutor\", \"message\": \"postgres deadlock detected transaction=tx-81245\", \"threadName\": \"executor-thread-1\", \"threadId\": 80, \"IMAGE_TAG\": \"5.1.1\", \"environment\": \"production\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\"}",
+    "{\"timestamp\": \"2026-09-04T16:47:43.294Z\", \"sequence\": 70106, \"level\": \"WARN\", \"loggerName\": \"com.mockcorp.commerce.paymentservice.app.transaction.PaymentService\", \"message\": \"transaction=tx-81245 rollback reason=\\\"deadlock detected\\\"\", \"threadName\": \"executor-thread-1\", \"threadId\": 80, \"IMAGE_TAG\": \"5.1.1\", \"environment\": \"production\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\"}",
+    "{\"timestamp\": \"2026-09-04T16:47:44.102Z\", \"sequence\": 70107, \"level\": \"INFO\", \"loggerName\": \"com.mockcorp.commerce.paymentservice.app.transaction.PaymentService\", \"message\": \"retry transaction=tx-81244 attempt=2 backoff=250ms\", \"threadName\": \"executor-thread-1\", \"threadId\": 80, \"IMAGE_TAG\": \"5.1.1\", \"environment\": \"production\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\"}",
+    "{\"timestamp\": \"2026-09-04T16:48:05.721Z\", \"sequence\": 70108, \"level\": \"WARN\", \"loggerName\": \"com.mockcorp.commerce.paymentservice.app.monitoring.PaymentServiceMonitor\", \"message\": \"transaction_error_rate=3.8% baseline=0.2%\", \"threadName\": \"executor-thread-1\", \"threadId\": 80, \"IMAGE_TAG\": \"5.1.1\", \"environment\": \"production\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\"}"
+  ],
+  "raw_events": [],
+  "raw_alerts": [
+    {
+      "alert_name": "DatabaseDeadlockDetected",
+      "severity": "critical",
+      "fired_at": "2026-09-04T16:48:00.000Z",
+      "labels": {
+        "service": "payment-service",
+        "namespace": "prod"
+      }
+    }
+  ],
+  "raw_metrics": {
+    "deadlocks_per_5min": 37,
+    "transaction_error_rate_pct": 3.8,
+    "baseline_error_rate_pct": 0.2,
+    "db_cpu_pct": 61,
+    "db_connections": 72,
+    "db_max_connections": 150,
+    "pod_restarts": 0
+  },
+  "metadata": {
+    "scenario_id": "INC-DB-5003",
+    "service": "payment-service",
+    "namespace": "prod",
+    "data_sources": [
+      "db_logs",
+      "metrics"
+    ],
+    "runbook": "Database Deadlock Remediation"
+  }
+}

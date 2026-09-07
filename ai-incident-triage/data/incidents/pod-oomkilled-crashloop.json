@@ -1,0 +1,72 @@
+{
+  "incident_id": "INC-OOM-5007",
+  "title": "Pod CrashLoopBackOff due to OOMKilled on recommendation-service",
+  "description": "A batch job inside the pod (ModelRefreshJob) spikes memory in short bursts, exceeding the container limit and triggering repeated OOM kills (exit code 137), leaving the pod in CrashLoopBackOff. The OOMKilled event + exit code directly prove the kill mechanism; they do not by themselves prove the batch job is the only contributor. Remediation guidance is in the OOMKilled / CrashLoopBackOff runbook, and the exact spike source needs heap-dump verification.",
+  "source": "mock",
+  "service": "recommendation-service",
+  "environment": "PRODUCTION",
+  "priority_hint": "P2",
+  "tags": [
+    "memory",
+    "oomkilled",
+    "crashloop",
+    "kubernetes"
+  ],
+  "timestamp": "2026-08-31T14:02:11.000Z",
+  "raw_logs": [
+    "{\"timestamp\": \"2026-08-31T14:02:11.114302Z\", \"sequence\": 15320, \"level\": \"INFO\", \"loggerName\": \"com.mockcorp.commerce.recommendationservice.app.batch.ModelRefreshJob\", \"message\": \"Loaded candidate embedding matrix, shape=[482113,256]\", \"threadName\": \"batch-worker-1\", \"threadId\": 41, \"IMAGE_TAG\": \"3.4.1\", \"environment\": \"production\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\"}",
+    "{\"timestamp\": \"2026-08-31T14:02:42.881765Z\", \"sequence\": 15334, \"level\": \"WARN\", \"loggerName\": \"com.mockcorp.commerce.recommendationservice.app.batch.ModelRefreshJob\", \"message\": \"GC pause exceeded 800ms during embedding matrix merge, heap usage at 92%\", \"threadName\": \"batch-worker-1\", \"threadId\": 41, \"IMAGE_TAG\": \"3.4.1\", \"environment\": \"production\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\"}",
+    "{\"timestamp\": \"2026-08-31T14:02:57.019442Z\", \"sequence\": 15341, \"level\": \"ERROR\", \"loggerName\": \"com.mockcorp.commerce.recommendationservice.app.batch.ModelRefreshJob\", \"message\": \"OutOfMemoryError while allocating buffer for candidate scoring batch, requested=512MB\", \"threadName\": \"batch-worker-1\", \"threadId\": 41, \"IMAGE_TAG\": \"3.4.1\", \"environment\": \"production\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\"}"
+  ],
+  "raw_events": [
+    {
+      "type": "Warning",
+      "reason": "OOMKilling",
+      "object": "pod/recommendation-service-7c9f8d4b6-x2vqk",
+      "message": "Memory cgroup out of memory: Killed process 1 (java) total-vm:4213212kB, anon-rss:2093456kB, file-rss:0kB, shmem-rss:0kB",
+      "timestamp": "2026-08-31T14:03:01Z"
+    },
+    {
+      "type": "Normal",
+      "reason": "Killing",
+      "object": "pod/recommendation-service-7c9f8d4b6-x2vqk",
+      "message": "Container recommendation-service failed liveness probe, will be restarted",
+      "timestamp": "2026-08-31T14:03:02Z"
+    },
+    {
+      "type": "Warning",
+      "reason": "BackOff",
+      "object": "pod/recommendation-service-7c9f8d4b6-x2vqk",
+      "message": "Back-off restarting failed container recommendation-service in pod recommendation-service-7c9f8d4b6-x2vqk_prod",
+      "timestamp": "2026-08-31T14:05:40Z"
+    }
+  ],
+  "raw_alerts": [
+    {
+      "alert_name": "PodOOMKilled",
+      "severity": "critical",
+      "fired_at": "2026-08-31T14:03:00.000Z",
+      "labels": {
+        "service": "recommendation-service",
+        "namespace": "prod"
+      }
+    }
+  ],
+  "raw_metrics": {
+    "pod_restart_count_12min": 6,
+    "oomkilled_exit_code": 137,
+    "memory_limit_gb": 2,
+    "peak_memory_usage_gb": 2.05
+  },
+  "metadata": {
+    "scenario_id": "INC-OOM-5007",
+    "service": "recommendation-service",
+    "namespace": "prod",
+    "data_sources": [
+      "logs_traces",
+      "k8s_logs",
+      "metrics"
+    ],
+    "runbook": "OOMKilled / CrashLoopBackOff Remediation"
+  }
+}

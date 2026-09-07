@@ -1,0 +1,59 @@
+{
+  "incident_id": "INC-CACHE-5011",
+  "title": "Cache stampede after a Redis eviction/restart",
+  "description": "A Redis restart during scheduled maintenance emptied the catalog cache: hit rate dropped 96% to 4% for ~90s, DB read QPS jumped ~800 to ~11,400, Postgres pool exhausted for ~40s, and p95 latency rose 80ms to 4.8s. The restart-to-load-spike timing correlation is directly observed; calling this specific mechanism (vs. another cause) fully responsible remains a well-supported but inferred conclusion.",
+  "source": "mock",
+  "service": "product-catalog-service",
+  "environment": "PRODUCTION",
+  "priority_hint": "P2",
+  "tags": [
+    "cache",
+    "redis",
+    "stampede",
+    "latency"
+  ],
+  "timestamp": "2026-08-31T11:00:00.000Z",
+  "raw_logs": [
+    "{\"timestamp\": \"2026-08-31T11:00:02.001884Z\", \"sequence\": 41022, \"level\": \"WARN\", \"loggerName\": \"com.mockcorp.commerce.productcatalogservice.cache.RedisCacheClient\", \"message\": \"Redis connection reset, client reconnecting to redis-catalog-cache-0.redis-catalog-cache-headless\", \"threadName\": \"executor-thread-9\", \"threadId\": 133, \"IMAGE_TAG\": \"6.0.2\", \"environment\": \"production\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\"}",
+    "{\"timestamp\": \"2026-08-31T11:00:03.442190Z\", \"sequence\": 41030, \"level\": \"WARN\", \"loggerName\": \"com.mockcorp.commerce.productcatalogservice.cache.RedisCacheClient\", \"message\": \"Cache MISS rate jumped to 96% (baseline 4%), Redis dataset reports 0 keys post-restart\", \"threadName\": \"executor-thread-9\", \"threadId\": 133, \"IMAGE_TAG\": \"6.0.2\", \"environment\": \"production\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\"}",
+    "{\"timestamp\": \"2026-08-31T11:00:04.117832Z\", \"sequence\": 41041, \"level\": \"ERROR\", \"loggerName\": \"com.mockcorp.commerce.productcatalogservice.app.repository.ProductReadRepository\", \"message\": \"Postgres connection pool exhausted: 100/100 connections in use, 210 requests queued\", \"threadName\": \"executor-thread-9\", \"threadId\": 133, \"IMAGE_TAG\": \"6.0.2\", \"environment\": \"production\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\"}"
+  ],
+  "raw_events": [
+    {
+      "type": "Normal",
+      "reason": "Killing",
+      "object": "pod/redis-catalog-cache-0",
+      "message": "Redis pod restarted due to node drain during scheduled maintenance",
+      "timestamp": "2026-08-31T11:00:00Z"
+    }
+  ],
+  "raw_alerts": [
+    {
+      "alert_name": "PostgresPoolExhausted",
+      "severity": "critical",
+      "fired_at": "2026-08-31T11:00:04.000Z",
+      "labels": {
+        "service": "product-catalog-service",
+        "namespace": "prod"
+      }
+    }
+  ],
+  "raw_metrics": {
+    "cache_hit_rate_pct": 4,
+    "db_read_qps": 11400,
+    "postgres_connections_used": 100,
+    "postgres_connections_max": 100,
+    "p95_latency_ms": 4800
+  },
+  "metadata": {
+    "scenario_id": "INC-CACHE-5011",
+    "service": "product-catalog-service",
+    "namespace": "prod",
+    "data_sources": [
+      "logs_traces",
+      "k8s_logs",
+      "metrics"
+    ],
+    "runbook": "Cache Stampede Remediation"
+  }
+}

@@ -124,7 +124,7 @@ def triage(
     runbook_solution = final_state.get("runbook_solution")
     if runbook_name and runbook_solution:
         typer.echo(f"Runbook        : A matching runbook was found for \"{runbook_name}\".")
-        typer.echo(f"Runbook Fix    : {runbook_solution}")
+        typer.echo(f"Runbook Recommendation: {runbook_solution}")
 
     notification_status = final_state.get("notification_status")
     if notification_status is not None and notification_status.value == "NOTIFIED":

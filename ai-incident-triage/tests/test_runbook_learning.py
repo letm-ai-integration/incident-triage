@@ -1,21 +1,27 @@
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.runbook_learning_service import run_runbook_learning_loop, _append_to_runbook, _create_new_runbook, _slugify_segment, _generate_runbook_filename
-from app.services.notification_service import notification_service
-from app.domain.enums.priority import Priority
-from app.domain.enums.incident_type import IncidentType
-from app.domain.models.classification import ClassificationResult
-from app.domain.models.incident import Incident
-from app.domain.models.root_cause import RootCauseAnalysis
-from app.domain.models.hypothesis import Hypothesis, HypothesisLabel
-from app.domain.models.verification import VerificationResult
-from app.domain.models.report import IncidentReport
 from app.domain.enums.environment import Environment
-from app.knowledge.retriever import RetrievedChunk
+from app.domain.enums.incident_type import IncidentType
+from app.domain.enums.priority import Priority
+from app.domain.models.classification import ClassificationResult
 from app.domain.models.evidence import EvidenceCollection
+from app.domain.models.hypothesis import Hypothesis, HypothesisLabel
+from app.domain.models.incident import Incident
+from app.domain.models.report import IncidentReport
+from app.domain.models.root_cause import RootCauseAnalysis
+from app.domain.models.verification import VerificationResult
+from app.knowledge.retriever import RetrievedChunk
+from app.services.notification_service import notification_service
+from app.services.runbook_learning_service import (
+    _append_to_runbook,
+    _create_new_runbook,
+    _generate_runbook_filename,
+    _slugify_segment,
+    run_runbook_learning_loop,
+)
 
 
 @pytest.fixture

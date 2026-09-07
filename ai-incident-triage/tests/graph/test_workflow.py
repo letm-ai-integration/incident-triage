@@ -70,11 +70,15 @@ def test_build_triage_graph_registers_all_nodes_before_compilation():
 
 
 # ---------------------------------------------------------------------------
-# 2-4. Execution, agent/node execution, state propagation (resolved flow)
+# 2-4. Execution, agent/node execution, state propagation (investigate-only flow)
 # ---------------------------------------------------------------------------
 
+# Phase 4: this pipeline is investigate-only (no remediation executor), so no
+# mocked incident -- which by design carries no external recovery telemetry --
+# may resolve. High RCA confidence never sets is_resolved.
 
-def test_end_to_end_database_timeout_resolves():
+
+def test_end_to_end_database_timeout_identifies_rca_without_resolving():
     result = _run(_load("database_timeout.json"))
 
     # ingestion -> classification propagation
@@ -91,8 +95,11 @@ def test_end_to_end_database_timeout_resolves():
     assert result["investigation_summary"]["evidence_count"] >= 3
     assert result["root_cause"].primary_cause.description
     assert result["approval"].approved is True
-    assert result["verification_result"].is_resolved is True
-    assert result["is_resolved"] is True
+    # high confidence + expected action is NOT resolution (Phase 4 gate)
+    assert result["verification_result"].is_resolved is False
+    assert result["is_resolved"] is False
+    assert result["investigation_status"] == IncidentStatus.UNRESOLVED
+    assert result["retry_count"] > 0  # reinvestigation loop ran, then exhausted
     assert result["notification_status"] == NotificationStatus.NOTIFIED
     assert result["incident_report"].incident_id == result["incident_id"]
     assert not result.get("errors")
@@ -105,7 +112,9 @@ def test_end_to_end_database_timeout_resolves():
 )
 def test_all_rich_mock_incidents_flow_end_to_end(sample: str):
     result = _run(_load(sample))
-    assert result.get("is_resolved") is True
+    # investigate-only: no mock incident carries external recovery evidence
+    assert result.get("is_resolved") is False
+    assert result.get("investigation_status") == IncidentStatus.UNRESOLVED
     assert result.get("notification_status") == NotificationStatus.NOTIFIED
     assert result.get("incident_report") is not None
 
@@ -161,9 +170,10 @@ def test_route_after_verification_reinvestigates_then_completes():
 def test_unresolved_incident_loops_then_terminates_unresolved():
     """The synthetic unmatched incident has zero corroborating telemetry in
     model-data (deliberately unsynchronized service 'graviton-scheduler'), so
-    retrieval stays irrelevant -> confidence below the resolution threshold ->
-    verification fails -> reinvestigation loop bounded by MAX_INVESTIGATION_RETRIES
-    terminates at notification with an unresolved outcome."""
+    retrieval stays irrelevant -> low confidence and, like every mocked
+    incident, no external recovery evidence -> verification fails ->
+    reinvestigation loop bounded by MAX_INVESTIGATION_RETRIES terminates at
+    notification with an unresolved outcome."""
     result = _run(_load("unmatched-no-telemetry.json"))
     assert result["is_resolved"] is False
     assert result["investigation_status"] == IncidentStatus.UNRESOLVED
@@ -183,7 +193,13 @@ def test_final_state_contains_report_and_markdown_renderable():
     report = result["incident_report"]
     markdown = render_markdown_report(report)
     assert report.incident_id in markdown
-    assert "Root Cause" in markdown or "root cause" in markdown.lower()
+    # Canonical Phase 5 structure
+    assert "## Incident Summary" in markdown
+    assert "### Root Cause Analysis" in markdown
+    assert "### Recommended Remediation" in markdown
+    assert "### Investigation Status" in markdown
+    # investigate-only: remediation is never claimed applied in a mock run
+    assert "- **Remediation:** Pending On-Call Action" in markdown
 
 
 # ---------------------------------------------------------------------------

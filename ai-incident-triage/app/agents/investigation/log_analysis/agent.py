@@ -3,24 +3,27 @@ from __future__ import annotations
 
 import logging
 import pathlib
-from typing import Optional
 
-from app.agents.investigation.log_analysis.parser import LogAnalysisResult, parse_log_analysis_response
+from app.agents.investigation.log_analysis.parser import (
+    LogAnalysisResult,
+    parse_log_analysis_response,
+)
 from app.agents.investigation.log_analysis.prompt import build_log_analysis_prompt
+from app.domain.enums.provenance import EvidenceProvenance
 from app.domain.models.classification import ClassificationResult
 from app.domain.models.evidence import Evidence
 from app.domain.models.hypothesis import Hypothesis, HypothesisLabel
 from app.domain.models.incident import Incident
 from app.guardrails.prompt_injection import check_prompt_injection
-from app.llm.client import create_structured_agent
 from app.knowledge.retriever import RetrievedChunk, retrieve
 from app.knowledge.vector_store import VectorStoreCollectionMissing
+from app.llm.client import create_structured_agent
 from app.logging_utils import (
     subagent_entry,
+    subagent_error,
+    subagent_exit,
     subagent_output,
     subagent_process,
-    subagent_exit,
-    subagent_error,
 )
 from app.tools.mock.logs import MockLogTool
 
@@ -40,7 +43,7 @@ LOG_COLLECTION = "logs"
 
 
 def _build_query(
-    incident: Incident, classification: Optional[ClassificationResult] = None
+    incident: Incident, classification: ClassificationResult | None = None
 ) -> str:
     """Turn incident context into the natural-language query for the log RAG."""
     parts: list[str] = []
@@ -59,7 +62,7 @@ def _build_query(
 
 def _retrieve_logs(
     incident: Incident,
-    classification: Optional[ClassificationResult] = None,
+    classification: ClassificationResult | None = None,
     k: int = 3,
 ) -> tuple[list[RetrievedChunk], str]:
     """Query the model-data ``logs`` collection for incident-relevant evidence.
@@ -90,7 +93,7 @@ def _retrieve_logs(
 
 
 def _collect_query(
-    incident: Incident, classification: Optional[ClassificationResult] = None
+    incident: Incident, classification: ClassificationResult | None = None
 ) -> str:
     return _build_query(incident, classification)
 
@@ -100,11 +103,46 @@ def _keyword_signals(texts: list[str]) -> list[str]:
     return [kw for kw in _SIGNALS if any(kw in t for t in lowered)]
 
 
+def _service_tokens(value: str | None) -> set[str]:
+    """Meaningful lowercase tokens of a service/pod identifier.
+
+    Structural tokens shared by every service name (the ``-service`` suffix
+    etc.) are dropped so *distinct* services never "relate" to each other just
+    because both end in ``service`` (Phase 8.3 cross-incident grounding).
+    """
+    import re
+
+    generic = {
+        "service", "svc", "app", "pod", "k8s", "kubernetes",
+        "deployment", "replicaset", "statefulset", "daemonset", "job",
+    }
+    return {
+        t for t in re.split(r"[^a-z0-9]+", (value or "").lower())
+        if len(t) >= 4 and t not in generic
+    }
+
+
+def _services_relate(incident_service: str | None, retrieved_services) -> bool:
+    """True when ANY retrieved chunk belongs to the incident's service.
+
+    Prevents cross-incident contamination: model-data documents of *other*
+    services must not be counted as this incident's observed telemetry just
+    because they happen to contain generic words like error/fail/restart.
+    """
+    inc = _service_tokens(incident_service)
+    if not inc:
+        return False
+    for svc in retrieved_services or []:
+        if svc and (_service_tokens(str(svc)) & inc):
+            return True
+    return False
+
+
 def _tag_retrieval_meta(
-    result: "LogAnalysisResult",
+    result: LogAnalysisResult,
     retrieved: list[RetrievedChunk],
     retrieval_error: str,
-) -> "LogAnalysisResult":
+) -> LogAnalysisResult:
     """Attach retrieval provenance to the first evidence item.
 
     Keeps the produced finding visibly grounded in *model-data* so the caller
@@ -123,9 +161,49 @@ def _tag_retrieval_meta(
     return result
 
 
+def _assign_provenance(
+    result: LogAnalysisResult,
+    retrieved: list[RetrievedChunk],
+    incident: Incident,
+) -> LogAnalysisResult:
+    """Ground each finding: OBSERVED only when log telemetry was available.
+
+    Telemetry counts as available when the incident carried ``raw_logs`` or the
+    model-data ``logs`` collection returned documents FOR THE INCIDENT'S SERVICE
+    (unrelated services' documents are never this incident's telemetry). Findings
+    over that telemetry are OBSERVED; with zero log telemetry everything the
+    agent wrote can only be REPORTED at best.
+    """
+    service_relevant = _services_relate(
+        incident.service, [c.metadata.get("service") for c in retrieved]
+    )
+    telemetry_like = list(incident.raw_logs)
+    if service_relevant:
+        telemetry_like.extend(chunk.text for chunk in retrieved)
+    telemetry_signals = _keyword_signals(telemetry_like)
+    available = bool(incident.raw_logs) or service_relevant
+    if result.evidence:
+        raw = result.evidence[0].raw_data
+        raw["telemetry_signals"] = telemetry_signals[:10]
+        raw["telemetry_available"] = available
+        raw["log_count"] = len(incident.raw_logs)
+        if not available:
+            raw["unavailable_reason"] = (
+                "no raw logs attached and no service-matching model-data log "
+                "documents retrieved"
+            )
+    for ev in result.evidence:
+        ev.provenance = (
+            EvidenceProvenance.OBSERVED if available else EvidenceProvenance.REPORTED
+        )
+    for hyp in result.hypotheses:
+        hyp.provenance = EvidenceProvenance.INFERRED
+    return result
+
+
 async def analyze_logs(
     incident: Incident,
-    classification: Optional[ClassificationResult] = None,
+    classification: ClassificationResult | None = None,
     model: str | None = None,
 ) -> LogAnalysisResult:
     """Analyze application and system logs retrieved from the model-data RAG."""
@@ -170,6 +248,7 @@ async def analyze_logs(
     # 5. Parse response
     result = parse_log_analysis_response(response)
     result = _tag_retrieval_meta(result, retrieved, retrieval_error)
+    result = _assign_provenance(result, retrieved, incident)
     subagent_output(
         AGENT_NAME,
         f"severity='{'high' if result.summary and 'error' in result.summary.lower() else 'info'}' "
@@ -197,24 +276,49 @@ def _deterministic_analysis(incident: Incident) -> LogAnalysisResult:
         for a in incident.raw_alerts
     ]
     matched_signals = _keyword_signals(texts)
+    # Signals found in *actual log telemetry* (attached raw logs + model-data
+    # log documents for THIS incident's service), excluding the incident
+    # description/alerts -- those are REPORTED, not observed log content.
+    service_relevant = _services_relate(
+        incident.service, [c.metadata.get("service") for c in retrieved]
+    )
+    telemetry_like = list(incident.raw_logs)
+    if retrieved_text and service_relevant:
+        telemetry_like.append(retrieved_text)
+    telemetry_signals = _keyword_signals(telemetry_like)
+    has_log_telemetry = bool(incident.raw_logs) or service_relevant
 
-    if retrieved and matched_signals:
+    if not has_log_telemetry:
+        finding = (
+            f"Log RAG collection unavailable ({retrieval_error}) - no grounded log "
+            "evidence to analyze."
+        )
+        severity = "info"
+    elif retrieved and service_relevant and telemetry_signals:
         finding = (
             "Found error signals in retrieved model-data logs: "
-            f"{', '.join(matched_signals[:5])}."
+            f"{', '.join(telemetry_signals[:5])}."
         )
         severity = "high"
-    elif retrieved and not matched_signals:
+    elif telemetry_signals:
+        finding = (
+            "Found error signals in incident raw log lines: "
+            f"{', '.join(telemetry_signals[:5])}."
+        )
+        severity = "high"
+    elif retrieved and not service_relevant:
+        finding = (
+            f"Retrieved {len(retrieved)} model-log document(s) but none belong to "
+            f"service '{incident.service}' "
+            f"(found services={sorted({str(c.metadata.get('service')) for c in retrieved})[:6]}); "
+            "treating log evidence for this incident as unavailable."
+        )
+        severity = "info"
+    elif retrieved:
         finding = (
             f"Retrieved {len(retrieved)} model-log document(s) for service "
             f"'{retrieved[0].metadata.get('service') or incident.service}' "
             "but no explicit error signals matched; reviewed as informational."
-        )
-        severity = "info"
-    elif not retrieved:
-        finding = (
-            f"Log RAG collection unavailable ({retrieval_error}) - no grounded log "
-            "evidence to analyze."
         )
         severity = "info"
     else:
@@ -226,8 +330,15 @@ def _deterministic_analysis(incident: Incident) -> LogAnalysisResult:
         source="log_analysis",
         finding=finding,
         severity=severity,
+        provenance=(
+            EvidenceProvenance.OBSERVED
+            if has_log_telemetry
+            else EvidenceProvenance.REPORTED
+        ),
         raw_data={
             "matched_signals": matched_signals[:10],
+            "telemetry_signals": telemetry_signals[:10],
+            "telemetry_available": has_log_telemetry,
             "retrieved_documents": len(retrieved),
             "retrieved_services": sorted(
                 {r.metadata.get("service") for r in retrieved if r.metadata.get("service")}
@@ -242,6 +353,7 @@ def _deterministic_analysis(incident: Incident) -> LogAnalysisResult:
         supporting_evidence=["ev-log-1"],
         contradicting_evidence=[],
         label=HypothesisLabel.LIKELY if matched_signals else HypothesisLabel.POSSIBLE,
+        provenance=EvidenceProvenance.INFERRED,
     )
     return LogAnalysisResult(
         evidence=[evidence],
@@ -252,7 +364,7 @@ def _deterministic_analysis(incident: Incident) -> LogAnalysisResult:
 
 async def analyze_logs_with_fallback(
     incident: Incident,
-    classification: Optional[ClassificationResult] = None,
+    classification: ClassificationResult | None = None,
     llm=None,
 ) -> LogAnalysisResult:
     """Always execute log analysis. Uses LLM when available, else deterministic fallback.
@@ -299,6 +411,6 @@ class LogAnalysisAgent:
     async def run(
         self,
         incident: Incident,
-        classification: Optional[ClassificationResult] = None,
+        classification: ClassificationResult | None = None,
     ) -> LogAnalysisResult:
         return await analyze_logs(incident, classification)

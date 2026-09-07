@@ -9,7 +9,30 @@ from __future__ import annotations
 
 import re
 
-_ALLOWED_TAGS = {"h1", "h2", "h3", "p", "b", "strong", "i", "em", "ul", "ol", "li", "br", "a"}
+_ALLOWED_TAGS = {
+    "h1",
+    "h2",
+    "h3",
+    "p",
+    "b",
+    "strong",
+    "i",
+    "em",
+    "ul",
+    "ol",
+    "li",
+    "br",
+    "a",
+    # Structural tags the canonical Phase 5 notification template uses for the
+    # Impacted Services table and the Runbook-unavailable / Important notes.
+    "table",
+    "thead",
+    "tbody",
+    "tr",
+    "th",
+    "td",
+    "blockquote",
+}
 _TAG_RE = re.compile(r"</?([a-zA-Z0-9]+)((?:\s+[^<>]*)?)/?>")
 _HREF_RE = re.compile(r'href\s*=\s*"(https?://[^"]*)"', re.IGNORECASE)
 

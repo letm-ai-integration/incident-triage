@@ -17,7 +17,7 @@ from typing import Any
 from app.agents.investigation.orchestrator import investigate
 from app.domain.enums.status import IncidentStatus
 from app.llm.client import LLMConfigurationError, get_chat_model
-from app.logging_utils import agent_entry, agent_output, agent_exit, agent_error
+from app.logging_utils import agent_entry, agent_error, agent_exit, agent_output
 
 
 def investigation_service(state: dict[str, Any], deps: dict[str, Any]) -> dict[str, Any]:
@@ -45,7 +45,6 @@ def investigation_service(state: dict[str, Any], deps: dict[str, Any]) -> dict[s
     finally:
         agent_exit("InvestigationService")
 
-    retry_count = state.get("retry_count", 0) + (1 if "retry_count" in state else 0)
     return {
         "evidence": outcome.evidence,
         "hypotheses": outcome.hypotheses,
@@ -55,5 +54,4 @@ def investigation_service(state: dict[str, Any], deps: dict[str, Any]) -> dict[s
         "runbook_name": outcome.runbook_name,
         "runbook_solution": outcome.runbook_solution,
         "investigation_status": IncidentStatus.INVESTIGATING,
-        "retry_count": retry_count,
     }
