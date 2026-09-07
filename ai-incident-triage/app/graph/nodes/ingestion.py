@@ -128,8 +128,19 @@ def _resolve_incident_id(raw: dict, state: IncidentState) -> str:
 
 
 def _default_ingest(state: IncidentState, deps: dict) -> dict:
-    """Fallback ingestion: build an ``Incident`` from ``raw_input``."""
+    """Fallback ingestion: build an ``Incident`` from ``raw_input``.
+
+    Canonical telemetry keys are ``raw_logs`` / ``raw_events`` / ``raw_alerts``
+    / ``raw_metrics`` (they mirror the ``Incident`` model fields). The legacy
+    ``logs`` / ``events`` / ``alerts`` / ``metrics`` keys are still accepted as a
+    fallback so older mock incidents keep working.
+    """
     raw = state.get("raw_input") or {}
+
+    def _telemetry(new_key: str, legacy_key: str, default):
+        value = raw.get(new_key, raw.get(legacy_key, default))
+        return value if value is not None else default
+
     incident = Incident(
         incident_id=_resolve_incident_id(raw, state),
         title=raw.get("title", "Untitled incident"),
@@ -140,10 +151,10 @@ def _default_ingest(state: IncidentState, deps: dict) -> dict:
         priority_hint=_parse_priority(raw.get("priority_hint")),
         tags=raw.get("tags", []),
         timestamp=_parse_timestamp(raw.get("timestamp")),
-        raw_logs=raw.get("logs", []),
-        raw_events=raw.get("events", []),
-        raw_alerts=raw.get("alerts", []),
-        raw_metrics=raw.get("metrics", {}),
+        raw_logs=_telemetry("raw_logs", "logs", []),
+        raw_events=_telemetry("raw_events", "events", []),
+        raw_alerts=_telemetry("raw_alerts", "alerts", []),
+        raw_metrics=_telemetry("raw_metrics", "metrics", {}),
         metadata=raw.get("metadata", {}),
     )
     return {

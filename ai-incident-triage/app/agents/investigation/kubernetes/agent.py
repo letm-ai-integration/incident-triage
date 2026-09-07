@@ -2,29 +2,32 @@
 from __future__ import annotations
 
 import logging
+import pathlib
 import re
-from typing import Optional
 
-from app.agents.investigation.kubernetes.parser import KubernetesAnalysisResult, parse_kubernetes_response
+from app.agents.investigation.kubernetes.parser import (
+    KubernetesAnalysisResult,
+    parse_kubernetes_response,
+)
 from app.agents.investigation.kubernetes.prompt import build_kubernetes_prompt
+from app.domain.enums.provenance import EvidenceProvenance
 from app.domain.models.classification import ClassificationResult
 from app.domain.models.evidence import Evidence
 from app.domain.models.hypothesis import Hypothesis, HypothesisLabel
 from app.domain.models.incident import Incident
 from app.guardrails.prompt_injection import check_prompt_injection
-from app.llm.client import create_structured_agent
 from app.knowledge.retriever import RetrievedChunk, retrieve
 from app.knowledge.vector_store import VectorStoreCollectionMissing
+from app.llm.client import create_structured_agent
 from app.logging_utils import (
     subagent_entry,
+    subagent_error,
+    subagent_exit,
     subagent_output,
     subagent_process,
-    subagent_exit,
-    subagent_error,
 )
 from app.tools.mock.kubernetes import MockKubernetesTool, MockKubernetesToolOutput
 
-import pathlib
 SYSTEM_PROMPT_PATH = pathlib.Path(__file__).parent.parent.parent.parent / "prompts" / "templates" / "kubernetes.txt"
 with open(SYSTEM_PROMPT_PATH, "r", encoding="utf-8") as f:
     SYSTEM_PROMPT = f.read()
@@ -51,7 +54,7 @@ def _keyword_signals(texts: list[str]) -> list[str]:
 
 
 def _build_query(
-    incident: Incident, classification: Optional[ClassificationResult] = None
+    incident: Incident, classification: ClassificationResult | None = None
 ) -> str:
     parts: list[str] = []
     if classification is not None:
@@ -111,7 +114,7 @@ def _k8s_summary(chunks: list[RetrievedChunk]) -> dict:
 
 async def analyze_kubernetes(
     incident: Incident,
-    classification: Optional[ClassificationResult] = None,
+    classification: ClassificationResult | None = None,
     model: str | None = None,
 ) -> KubernetesAnalysisResult:
     """Analyze Kubernetes telemetry retrieved from the model-data ``k8s`` RAG."""
@@ -121,15 +124,15 @@ async def analyze_kubernetes(
     retrieved, retrieval_error = _retrieve_k8s(incident, classification)
     if retrieved:
         k8s_text = "\n\n".join(chunk.text for chunk in retrieved)
-        proximity = dict(
-            service=incident.service,
-            namespace=incident.metadata.get("namespace", "default")
+        proximity = {
+            "service": incident.service,
+            "namespace": incident.metadata.get("namespace", "default")
             if isinstance(incident.metadata, dict)
             else "default",
-            pod_statuses=[],
-            recent_events=k8s_text.splitlines(),
-            resource_usage={},
-        )
+            "pod_statuses": [],
+            "recent_events": k8s_text.splitlines(),
+            "resource_usage": {},
+        }
         tool_output = MockKubernetesToolOutput(**proximity)
     else:
         tool_output = MockKubernetesToolOutput(
@@ -172,6 +175,7 @@ async def analyze_kubernetes(
     # 5. Parse response
     result = parse_kubernetes_response(response)
     _tag_k8s_meta(result, retrieved, retrieval_error)
+    _assign_provenance(result, retrieved, incident)
     subagent_output(
         AGENT_NAME,
         f"evidence_count={len(result.evidence)} retrieved={len(retrieved)} "
@@ -182,10 +186,10 @@ async def analyze_kubernetes(
 
 
 def _tag_k8s_meta(
-    result: "KubernetesAnalysisResult",
+    result: KubernetesAnalysisResult,
     retrieved: list[RetrievedChunk],
     retrieval_error: str,
-) -> "KubernetesAnalysisResult":
+) -> KubernetesAnalysisResult:
     raw = _k8s_summary(retrieved) if retrieved else {"retrieved_documents": 0}
     if retrieval_error:
         raw["retrieval_error"] = retrieval_error
@@ -194,9 +198,64 @@ def _tag_k8s_meta(
     return result
 
 
+def _assign_provenance(
+    result: KubernetesAnalysisResult,
+    retrieved: list[RetrievedChunk],
+    incident: Incident,
+) -> KubernetesAnalysisResult:
+    """Ground k8s findings in cluster telemetry (events + model-data docs).
+
+    Retrieved model-data documents only count as this incident's telemetry when
+    they belong to the incident's service -- other services' docs are never
+    evidence about this workload.
+    """
+    service_relevant = _services_relate(
+        incident.service, [c.metadata.get("service") for c in retrieved]
+    )
+    telemetry_like = ["\n".join(str(e) for e in incident.raw_events)]
+    if service_relevant:
+        telemetry_like.extend(chunk.text for chunk in retrieved)
+    telemetry_signals = _keyword_signals(telemetry_like)
+    available = bool(incident.raw_events) or service_relevant
+    if result.evidence:
+        raw = result.evidence[0].raw_data
+        raw["telemetry_signals"] = telemetry_signals[:10]
+        raw["telemetry_available"] = available
+        if not available:
+            raw["unavailable_reason"] = (
+                "no k8s events attached and no service-matching model-data "
+                "kubernetes documents retrieved"
+            )
+    for ev in result.evidence:
+        ev.provenance = (
+            EvidenceProvenance.OBSERVED if available else EvidenceProvenance.REPORTED
+        )
+    for hyp in result.hypotheses:
+        hyp.provenance = EvidenceProvenance.INFERRED
+    return result
+
+
+# Generic structural tokens that appear in every service name (e.g. the
+# "-service" suffix). Excluding them keeps *distinct* services from "relating"
+# to each other -- ``content-service`` and ``cart-service`` share only the
+# token ``service`` and must not be treated as the same workload (Phase 8.3).
+_GENERIC_SERVICE_TOKENS = {
+    "service", "svc", "app", "pod", "k8s", "kubernetes",
+    "deployment", "replicaset", "statefulset", "daemonset", "job",
+}
+
+
 def _service_tokens(value: str | None) -> set[str]:
-    """Meaningful lowercase tokens of a service/pod identifier."""
-    return {t for t in re.split(r"[^a-z0-9]+", (value or "").lower()) if len(t) >= 4}
+    """Meaningful lowercase tokens of a service/pod identifier.
+
+    Structural tokens shared by every Kubernetes name are dropped so
+    cross-service matching requires a *distinctive* shared token, not just
+    the ``service`` suffix.
+    """
+    return {
+        t for t in re.split(r"[^a-z0-9]+", (value or "").lower())
+        if len(t) >= 4 and t not in _GENERIC_SERVICE_TOKENS
+    }
 
 
 def _services_relate(incident_service: str | None, retrieved_services) -> bool:
@@ -231,7 +290,7 @@ def _deterministic_analysis(incident: Incident) -> KubernetesAnalysisResult:
         for a in incident.raw_alerts
     )
 
-    # Signals seen in the incident's OWN payload always count ...
+    # Signals seen in the incident's OWN cluster events always count ...
     matched = _keyword_signals([events_text, alerts])
     # ... while signals found in RAG documents only count when those documents
     # actually belong to this incident's service (no cross-incident leakage).
@@ -243,29 +302,59 @@ def _deterministic_analysis(incident: Incident) -> KubernetesAnalysisResult:
     if service_relevant:
         matched.extend(m for m in rag_matched if m not in matched)
 
-    k8s = _k8s_summary(retrieved) if retrieved else {"retrieved_documents": 0}
-    degraded = bool(matched)
+    # Grounding: only signals in *cluster telemetry* (own events + service-
+    # matching retrieved model-data documents) may mark the workload degraded.
+    # Alert names and the incident description are REPORTED, not observed
+    # cluster state.
+    telemetry_like = [events_text]
+    if retrieved_text and service_relevant:
+        telemetry_like.append(retrieved_text)
+    telemetry_signals = _keyword_signals(telemetry_like)
+    has_k8s_telemetry = bool(incident.raw_events) or service_relevant
+    degraded = bool(telemetry_signals) and has_k8s_telemetry
 
-    if retrieved:
+    k8s = _k8s_summary(retrieved) if retrieved else {"retrieved_documents": 0}
+
+    if retrieved and not service_relevant:
         if degraded:
+            # Degradation signals come from the incident's OWN attached events;
+            # retrieved documents belong to other services, so quoting their
+            # signals here would misattribute another workload's telemetry.
             finding = (
-                f"Pod/event signals detected in retrieved model-data k8s data: "
-                f"{', '.join(k8s.get('event_signals', [])[:5])}."
+                f"Workload degradation detected in the incident's attached k8s events: "
+                f"{', '.join(telemetry_signals[:5])}."
             )
-        elif not service_relevant:
+            severity = "medium"
+        else:
             finding = (
                 f"Retrieved {len(retrieved)} model k8s document(s) but none belong "
                 f"to service '{incident.service}' "
                 f"(found services={sorted({str(c.metadata.get('service')) for c in retrieved})[:6]}); "
                 "treating cluster state for this incident as unknown."
             )
-        else:
-            finding = (
-                f"Retrieved {len(retrieved)} model k8s document(s) "
-                f"(namespaces={k8s.get('namespaces')}) but no degradation signals "
-                "matched; cluster appears healthy for this incident."
-            )
-        severity = "medium" if degraded else "info"
+            severity = "info"
+    elif retrieved and degraded:
+        finding = (
+            f"Pod/event signals detected in model k8s data: "
+            f"{', '.join(k8s.get('event_signals', [])[:5] or telemetry_signals[:5])}."
+        )
+        severity = "medium"
+    elif retrieved:
+        finding = (
+            f"Retrieved {len(retrieved)} model k8s document(s) "
+            f"(namespaces={k8s.get('namespaces')}) but no degradation signals "
+            "matched; cluster appears healthy for this incident."
+        )
+        severity = "info"
+    elif degraded:
+        finding = (
+            "Workload degradation detected in the incident's attached k8s events: "
+            f"{', '.join(telemetry_signals[:5])}."
+        )
+        severity = "medium"
+    elif has_k8s_telemetry:
+        finding = "No degradation signals detected in the incident's attached k8s events."
+        severity = "info"
     else:
         finding = (
             f"K8s RAG collection unavailable ({retrieval_error}) - no grounded "
@@ -278,6 +367,11 @@ def _deterministic_analysis(incident: Incident) -> KubernetesAnalysisResult:
         source="kubernetes",
         finding=finding,
         severity=severity,
+        provenance=(
+            EvidenceProvenance.OBSERVED
+            if has_k8s_telemetry
+            else EvidenceProvenance.REPORTED
+        ),
         raw_data={
             "pod_statuses": [],
             "retrieved_documents": k8s.get("retrieved_documents", 0),
@@ -286,6 +380,8 @@ def _deterministic_analysis(incident: Incident) -> KubernetesAnalysisResult:
             "event_signals": k8s.get("event_signals", [])[:10],
             "degraded": degraded,
             "matched_signals": matched[:10],
+            "telemetry_signals": telemetry_signals[:10],
+            "telemetry_available": has_k8s_telemetry,
         },
     )
     hypothesis = Hypothesis(
@@ -295,6 +391,7 @@ def _deterministic_analysis(incident: Incident) -> KubernetesAnalysisResult:
         supporting_evidence=["ev-k8s-1"],
         contradicting_evidence=[],
         label=HypothesisLabel.LIKELY if degraded else HypothesisLabel.POSSIBLE,
+        provenance=EvidenceProvenance.INFERRED,
     ) if degraded else None
     return KubernetesAnalysisResult(
         evidence=[evidence],
@@ -305,7 +402,7 @@ def _deterministic_analysis(incident: Incident) -> KubernetesAnalysisResult:
 
 async def analyze_kubernetes_with_fallback(
     incident: Incident,
-    classification: Optional[ClassificationResult] = None,
+    classification: ClassificationResult | None = None,
     llm=None,
 ) -> KubernetesAnalysisResult:
     """Always execute Kubernetes analysis. Uses LLM when available, else deterministic fallback.
@@ -353,6 +450,6 @@ class KubernetesAgent:
     async def run(
         self,
         incident: Incident,
-        classification: Optional[ClassificationResult] = None,
+        classification: ClassificationResult | None = None,
     ) -> KubernetesAnalysisResult:
         return await analyze_kubernetes(incident, classification)

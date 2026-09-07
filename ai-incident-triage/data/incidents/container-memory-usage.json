@@ -1,0 +1,53 @@
+{
+  "incident_id": "INC-MEM-5006",
+  "title": "Container High Memory Usage Alert on content-service",
+  "description": "Sustained memory usage sits at ~100% of the configured limit with no clear leak signature: the app is simply under-provisioned for steady-state load. Flat saturation, not growth, so the evidence proves under-provisioning -- it does not prove a memory leak.",
+  "source": "mock",
+  "service": "content-service",
+  "environment": "STAGING",
+  "priority_hint": "P3",
+  "tags": [
+    "memory",
+    "resource-limit",
+    "kubernetes"
+  ],
+  "timestamp": "2026-08-31T12:27:17.000Z",
+  "raw_logs": [
+    "{\"timestamp\": \"2026-08-31T12:27:17.727693Z\", \"sequence\": 8217, \"level\": \"INFO\", \"loggerName\": \"com.mockcorp.commerce.contentservice.app.controllers.v2\", \"message\": \"getContentByUid stack=web, name=redirection_items\", \"threadName\": \"executor-thread-2\", \"threadId\": 102, \"IMAGE_TAG\": \"1.0.0\", \"environment\": \"staging\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\", \"requestDuration\": \"142ms\"}",
+    "{\"timestamp\": \"2026-08-31T12:27:17.928463Z\", \"sequence\": 8218, \"level\": \"INFO\", \"loggerName\": \"com.mockcorp.commerce.contentservice.app.controllers.v2\", \"message\": \"getContentByUid stack=web, name=redirection_items\", \"threadName\": \"executor-thread-2\", \"threadId\": 102, \"IMAGE_TAG\": \"1.0.0\", \"environment\": \"staging\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\", \"requestDuration\": \"139ms\"}",
+    "{\"timestamp\": \"2026-08-31T12:27:18.132558Z\", \"sequence\": 8219, \"level\": \"INFO\", \"loggerName\": \"com.mockcorp.commerce.contentservice.app.controllers.v2\", \"message\": \"getContentByUid stack=web, name=redirection_items\", \"threadName\": \"executor-thread-2\", \"threadId\": 102, \"IMAGE_TAG\": \"1.0.0\", \"environment\": \"staging\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\", \"requestDuration\": \"135ms\"}",
+    "{\"timestamp\": \"2026-08-31T12:27:18.331044Z\", \"sequence\": 8220, \"level\": \"INFO\", \"loggerName\": \"com.mockcorp.commerce.contentservice.app.controllers.v2\", \"message\": \"getContentByUid stack=web, name=redirection_items\", \"threadName\": \"executor-thread-2\", \"threadId\": 102, \"IMAGE_TAG\": \"1.0.0\", \"environment\": \"staging\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\", \"requestDuration\": \"144ms\"}",
+    "{\"timestamp\": \"2026-08-31T12:27:18.520912Z\", \"sequence\": 8221, \"level\": \"INFO\", \"loggerName\": \"com.mockcorp.commerce.contentservice.app.controllers.v2\", \"message\": \"getContentByUid stack=web, name=redirection_items\", \"threadName\": \"executor-thread-2\", \"threadId\": 102, \"IMAGE_TAG\": \"1.0.0\", \"environment\": \"staging\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\", \"requestDuration\": \"131ms\"}",
+    "{\"timestamp\": \"2026-08-31T12:27:18.728181Z\", \"sequence\": 8222, \"level\": \"INFO\", \"loggerName\": \"com.mockcorp.commerce.contentservice.app.controllers.v2\", \"message\": \"getContentByUid stack=web, name=redirection_items\", \"threadName\": \"executor-thread-2\", \"threadId\": 102, \"IMAGE_TAG\": \"1.0.0\", \"environment\": \"staging\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\", \"requestDuration\": \"138ms\"}",
+    "{\"timestamp\": \"2026-08-31T12:27:18.729092Z\", \"sequence\": 8223, \"level\": \"INFO\", \"loggerName\": \"com.mockcorp.commerce.contentservice.app.locale.TenantLocaleContext\", \"message\": \"Supported contains normalized language\", \"threadName\": \"executor-thread-2\", \"threadId\": 102, \"IMAGE_TAG\": \"2.0.0\", \"environment\": \"staging\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\", \"locale\": \"en-US\", \"tenantId\": \"tenant-mock-42\"}",
+    "{\"timestamp\": \"2026-08-31T12:27:18.925773Z\", \"sequence\": 8224, \"level\": \"INFO\", \"loggerName\": \"com.mockcorp.commerce.contentservice.app.controllers.v2\", \"message\": \"getContentByUid stack=web, name=redirection_items\", \"threadName\": \"executor-thread-2\", \"threadId\": 102, \"IMAGE_TAG\": \"1.0.0\", \"environment\": \"staging\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\", \"requestDuration\": \"141ms\"}",
+    "{\"timestamp\": \"2026-08-31T12:27:19.128079Z\", \"sequence\": 8225, \"level\": \"INFO\", \"loggerName\": \"com.mockcorp.commerce.contentservice.app.controllers.v2\", \"message\": \"getContentByUid stack=web, name=redirection_items\", \"threadName\": \"executor-thread-2\", \"threadId\": 102, \"IMAGE_TAG\": \"1.0.0\", \"environment\": \"staging\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\", \"requestDuration\": \"137ms\"}"
+  ],
+  "raw_events": [],
+  "raw_alerts": [
+    {
+      "alert_name": "ContainerMemoryUsageHigh",
+      "severity": "warning",
+      "fired_at": "2026-08-31T12:27:00.000Z",
+      "labels": {
+        "service": "content-service",
+        "namespace": "staging"
+      }
+    }
+  ],
+  "raw_metrics": {
+    "memory_limit_gb": 1.07,
+    "memory_usage_gb": 1.07,
+    "memory_headroom_pct": 0.0
+  },
+  "metadata": {
+    "scenario_id": "INC-MEM-5006",
+    "service": "content-service",
+    "namespace": "staging",
+    "data_sources": [
+      "metrics",
+      "logs_traces"
+    ],
+    "runbook": "Container Memory Limit / Steady-State Under-Provisioning"
+  }
+}

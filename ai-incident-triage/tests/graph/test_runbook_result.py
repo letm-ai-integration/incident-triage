@@ -57,8 +57,14 @@ def test_runbook_backed_incident_cites_runbook_in_final_result():
 
 
 def test_no_runbook_incident_follows_normal_flow():
-    """memory-oom has no runbook file -> normal analysis, zero runbook claims."""
-    result = _run(_load("memory-oom.json"))
+    """unmatched-no-telemetry has no runbook file -> normal analysis, zero runbook claims.
+
+    (memory-oom is no longer a valid negative control: Phase 7 added
+    ``Container Memory Limit / Steady-State Under-Provisioning``, which the
+    token-overlap resolver now matches to INC-010's "reaches the container
+    limit" description.)
+    """
+    result = _run(_load("unmatched-no-telemetry.json"))
 
     assert not result.get("runbook_name")
     assert not result.get("runbook_solution")

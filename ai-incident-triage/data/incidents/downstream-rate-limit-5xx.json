@@ -1,0 +1,51 @@
+{
+  "incident_id": "INC-RATELIMIT-5008",
+  "title": "Elevated 5xx errors from downstream API rate limiting",
+  "description": "Checkout authorization is failing with 502 Bad Gateway because the fraud-check-partner API is rate limiting us: its 429 rate has jumped to 64% of calls while our traffic held steady at ~145 req/s against the partner's newly-enforced 100 req/s limit. Logs directly prove the 429s and our resulting 502s; whether the partner actually lowered its limit (vs. our traffic rising) remains reporting-level unless their changelog is independently checked.",
+  "source": "mock",
+  "service": "payment-gateway-service",
+  "environment": "PRODUCTION",
+  "priority_hint": "P1",
+  "tags": [
+    "5xx",
+    "rate-limit",
+    "downstream",
+    "payment"
+  ],
+  "timestamp": "2026-08-31T09:14:02.000Z",
+  "raw_logs": [
+    "{\"timestamp\": \"2026-08-31T09:14:02.221093Z\", \"sequence\": 22011, \"level\": \"WARN\", \"loggerName\": \"com.mockcorp.commerce.paymentgateway.client.FraudCheckClient\", \"message\": \"Received 429 Too Many Requests from fraud-check-partner API, retry-after=5s\", \"threadName\": \"executor-thread-7\", \"threadId\": 210, \"IMAGE_TAG\": \"5.2.0\", \"environment\": \"production\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\"}",
+    "{\"timestamp\": \"2026-08-31T09:14:07.552310Z\", \"sequence\": 22019, \"level\": \"WARN\", \"loggerName\": \"com.mockcorp.commerce.paymentgateway.client.FraudCheckClient\", \"message\": \"Received 429 Too Many Requests from fraud-check-partner API, retry-after=5s\", \"threadName\": \"executor-thread-7\", \"threadId\": 210, \"IMAGE_TAG\": \"5.2.0\", \"environment\": \"production\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\"}",
+    "{\"timestamp\": \"2026-08-31T09:14:13.004421Z\", \"sequence\": 22031, \"level\": \"ERROR\", \"loggerName\": \"com.mockcorp.commerce.paymentgateway.app.controllers.CheckoutController\", \"message\": \"Payment authorization failed after 3 retries: upstream fraud-check-partner API exhausted retry budget\", \"threadName\": \"executor-thread-7\", \"threadId\": 210, \"IMAGE_TAG\": \"5.2.0\", \"environment\": \"production\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\", \"httpStatus\": 502}",
+    "{\"timestamp\": \"2026-08-31T09:14:13.009554Z\", \"sequence\": 22032, \"level\": \"ERROR\", \"loggerName\": \"com.mockcorp.commerce.paymentgateway.app.controllers.CheckoutController\", \"message\": \"Returning 502 Bad Gateway to client for order checkout\", \"threadName\": \"executor-thread-7\", \"threadId\": 210, \"IMAGE_TAG\": \"5.2.0\", \"environment\": \"production\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\", \"httpStatus\": 502}"
+  ],
+  "raw_events": [],
+  "raw_alerts": [
+    {
+      "alert_name": "Elevated5xxRate",
+      "severity": "critical",
+      "fired_at": "2026-08-31T09:14:00.000Z",
+      "labels": {
+        "service": "payment-gateway-service",
+        "namespace": "prod"
+      }
+    }
+  ],
+  "raw_metrics": {
+    "http_5xx_rate_pct": 18.7,
+    "fraud_partner_429_rate_pct": 64,
+    "retry_budget_exhaustions_10min": 340,
+    "traffic_req_per_s": 145,
+    "partner_limit_req_per_s": 100
+  },
+  "metadata": {
+    "scenario_id": "INC-RATELIMIT-5008",
+    "service": "payment-gateway-service",
+    "namespace": "prod",
+    "data_sources": [
+      "external_api_logs",
+      "metrics"
+    ],
+    "runbook": "Downstream Rate Limiting Remediation"
+  }
+}

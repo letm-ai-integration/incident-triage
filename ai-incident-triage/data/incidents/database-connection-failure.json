@@ -1,23 +1,17 @@
 {
   "incident_id": "INC-006",
   "title": "Database Connection Failure on checkout-db",
-  "description": "checkout-service cannot acquire a connection from the primary database (checkout-db) and customers see 'unable to complete order'. Connection acquisition attempts time out and the connection pool saturates at 100% under sustained checkout load.",
+  "description": "checkout-service cannot acquire a connection from the primary database (checkout-db) and customers see 'unable to complete order'. Connection acquisition attempts time out and the connection pool saturates at 100% under sustained checkout load. This is an investigation-and-recommendation scenario: nothing here indicates a fix was applied or recovery was observed.",
   "source": "mock",
   "service": "checkout-service",
   "environment": "PRODUCTION",
   "priority_hint": "P1",
-  "tags": [
-    "database",
-    "connection",
-    "failure",
-    "checkout",
-    "pool"
-  ],
+  "tags": ["database", "connection", "failure", "checkout", "pool"],
   "timestamp": "2026-08-06T10:20:00.000Z",
   "raw_logs": [
-    "ERROR [checkout-db-pool] connection acquisition wait time p95=29000ms approaching timeout 30000ms",
-    "ERROR com.ecommerce.checkout.CheckoutService - Timed out waiting for database connection pool 'HikariPool-1' after 30000ms",
-    "ERROR [checkout-db-pool] active=50 idle=0 waiting=34 utilization=100% threads_blocked=34"
+    "{\"timestamp\":\"2026-08-06T10:19:52.100Z\",\"sequence\":1101,\"loggerClassName\":\"org.slf4j.impl.Slf4jLogger\",\"loggerName\":\"com.mockcorp.commerce.checkoutservice.db.DbConnectionPoolMonitor\",\"level\":\"ERROR\",\"message\":\"[checkout-db-pool] connection acquisition wait time p95=29000ms approaching timeout 30000ms\",\"threadName\":\"pool-monitor-1\",\"threadId\":64,\"mdc\":{\"affiliate_code\":\"001\"},\"processName\":\"/work/quarkus/application\",\"processId\":1,\"IMAGE_TAG\":\"2.4.1\",\"region\":\"us-east-1\",\"environment\":\"production\"}",
+    "{\"timestamp\":\"2026-08-06T10:20:03.240Z\",\"sequence\":1102,\"loggerClassName\":\"org.slf4j.impl.Slf4jLogger\",\"loggerName\":\"com.mockcorp.commerce.checkoutservice.CheckoutService\",\"level\":\"ERROR\",\"message\":\"com.ecommerce.checkout.CheckoutService - Timed out waiting for database connection pool 'HikariPool-1' after 30000ms\",\"threadName\":\"executor-thread-6\",\"threadId\":72,\"mdc\":{\"affiliate_code\":\"001\"},\"processName\":\"/work/quarkus/application\",\"processId\":1,\"IMAGE_TAG\":\"2.4.1\",\"region\":\"us-east-1\",\"environment\":\"production\"}",
+    "{\"timestamp\":\"2026-08-06T10:20:12.870Z\",\"sequence\":1103,\"loggerClassName\":\"org.slf4j.impl.Slf4jLogger\",\"loggerName\":\"com.mockcorp.commerce.checkoutservice.db.DbConnectionPoolMonitor\",\"level\":\"ERROR\",\"message\":\"[checkout-db-pool] active=50 idle=0 waiting=34 utilization=100% threads_blocked=34\",\"threadName\":\"pool-monitor-1\",\"threadId\":64,\"mdc\":{\"affiliate_code\":\"001\"},\"processName\":\"/work/quarkus/application\",\"processId\":1,\"IMAGE_TAG\":\"2.4.1\",\"region\":\"us-east-1\",\"environment\":\"production\"}"
   ],
   "raw_events": [
     {

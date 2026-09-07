@@ -1,0 +1,51 @@
+{
+  "incident_id": "INC-TLS-5004",
+  "title": "TLS certificate expiration causing upstream connection failures",
+  "description": "Outbound notifications to the messaging-gateway provider fail TLS handshakes: 94 in 10 minutes, delivery failures 7.2%, internal service health UP. The affected provider certificate expired 2026-09-04T18:00:00Z. Expiry and handshake failures are directly observed; do not claim the certificate was replaced unless execution evidence exists.",
+  "source": "mock",
+  "service": "notification-service",
+  "environment": "PRODUCTION",
+  "priority_hint": "P2",
+  "tags": [
+    "tls",
+    "certificate",
+    "expiration",
+    "outbound"
+  ],
+  "timestamp": "2026-09-04T18:21:00.000Z",
+  "raw_logs": [
+    "{\"timestamp\": \"2026-09-04T18:20:51.781Z\", \"sequence\": 80101, \"level\": \"INFO\", \"loggerName\": \"com.mockcorp.commerce.notificationservice.app.messaging.NotificationService\", \"message\": \"provider=messaging-gateway request=sendNotification\", \"threadName\": \"executor-thread-1\", \"threadId\": 80, \"IMAGE_TAG\": \"2.7.0\", \"environment\": \"production\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\"}",
+    "{\"timestamp\": \"2026-09-04T18:20:52.019Z\", \"sequence\": 80102, \"level\": \"ERROR\", \"loggerName\": \"com.mockcorp.commerce.notificationservice.app.messaging.NotificationService\", \"message\": \"TLS handshake failed host=messaging-gateway reason=\\\"certificate has expired\\\"\", \"threadName\": \"executor-thread-1\", \"threadId\": 80, \"IMAGE_TAG\": \"2.7.0\", \"environment\": \"production\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\"}",
+    "{\"timestamp\": \"2026-09-04T18:20:52.021Z\", \"sequence\": 80103, \"level\": \"WARN\", \"loggerName\": \"com.mockcorp.commerce.notificationservice.app.messaging.NotificationService\", \"message\": \"provider_response=UNAVAILABLE retryAttempt=1\", \"threadName\": \"executor-thread-1\", \"threadId\": 80, \"IMAGE_TAG\": \"2.7.0\", \"environment\": \"production\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\"}",
+    "{\"timestamp\": \"2026-09-04T18:20:53.488Z\", \"sequence\": 80104, \"level\": \"ERROR\", \"loggerName\": \"com.mockcorp.commerce.notificationservice.app.messaging.NotificationService\", \"message\": \"outbound request failed exception=SSLHandshakeException\", \"threadName\": \"executor-thread-1\", \"threadId\": 80, \"IMAGE_TAG\": \"2.7.0\", \"environment\": \"production\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\"}",
+    "{\"timestamp\": \"2026-09-04T18:21:07.904Z\", \"sequence\": 80105, \"level\": \"ERROR\", \"loggerName\": \"com.mockcorp.commerce.notificationservice.app.messaging.NotificationService\", \"message\": \"notification_delivery_failed reason=\\\"TLS certificate validation failed\\\"\", \"threadName\": \"executor-thread-1\", \"threadId\": 80, \"IMAGE_TAG\": \"2.7.0\", \"environment\": \"production\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\"}",
+    "{\"timestamp\": \"2026-09-04T18:21:24.115Z\", \"sequence\": 80106, \"level\": \"INFO\", \"loggerName\": \"com.mockcorp.commerce.notificationservice.app.health.HealthCheck\", \"message\": \"internal_healthcheck status=UP\", \"threadName\": \"executor-thread-1\", \"threadId\": 80, \"IMAGE_TAG\": \"2.7.0\", \"environment\": \"production\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\"}"
+  ],
+  "raw_events": [],
+  "raw_alerts": [
+    {
+      "alert_name": "TLSCertificateExpiring",
+      "severity": "critical",
+      "fired_at": "2026-09-04T18:21:00.000Z",
+      "labels": {
+        "service": "notification-service",
+        "namespace": "prod"
+      }
+    }
+  ],
+  "raw_metrics": {
+    "tls_handshake_failures_10min": 94,
+    "delivery_failure_rate_pct": 7.2,
+    "certificate_expiry": "2026-09-04T18:00:00Z"
+  },
+  "metadata": {
+    "scenario_id": "INC-TLS-5004",
+    "service": "notification-service",
+    "namespace": "prod",
+    "data_sources": [
+      "logs_traces",
+      "metrics"
+    ],
+    "runbook": "TLS Certificate Expiration Remediation"
+  }
+}

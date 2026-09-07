@@ -25,12 +25,13 @@ from app.agents.investigation.runbook.agent import (
     MIN_RELEVANCE_SCORE,
     run_runbook_agent,
 )
+from app.domain.enums.provenance import EvidenceProvenance
 from app.domain.models.classification import ClassificationResult
 from app.domain.models.evidence import Evidence
 from app.domain.models.hypothesis import Hypothesis, HypothesisLabel
 from app.domain.models.incident import Incident
-from app.logging_utils import agent_entry, agent_output, agent_exit, agent_error
 from app.graph.tracing import suppress_node_events, unsuppress_node_events
+from app.logging_utils import agent_entry, agent_error, agent_exit, agent_output
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +58,41 @@ def _keyword_signals(texts: list[str]) -> list[str]:
     return [kw for kw in _SIGNALS if any(kw in t for t in lowered)]
 
 
+def _looks_like_confirmation(finding: str) -> bool:
+    """True when ``finding`` sounds like an *observed* claim rather than an
+    explicit statement that the source was unavailable."""
+    lowered = finding.lower()
+    markers = (
+        "no grounded", "unavailable", "no log evidence", "cannot confirm",
+        "no telemetry", "no raw logs", "no evidence",
+    )
+    return not any(m in lowered for m in markers)
+
+
+def _stamp_incident_scope(outcome: InvestigationOutcome, incident: Incident) -> None:
+    """Attach the incident identity to every piece of evidence and hypothesis.
+
+    Phase 8 grounding rule 3: logs/metrics/k8s evidence must be incident-scoped
+    (incident id + environment + time anchor). Each Evidence item is stamped so
+    a claim can always be attributed to exactly one incident and never leaks
+    into another incident's RCA. ``timestamp`` falls back to the incident's own
+    timestamp (the window anchor); producers may override with per-observation
+    times. The three per-subagent fields and the aggregated lists share the same
+    objects, so stamping in place is sufficient.
+    """
+    stamp = {
+        "incident_id": incident.incident_id,
+        "environment": incident.environment.value,
+        "timestamp": incident.timestamp,
+    }
+    for ev in outcome.evidence:
+        ev.incident_id = stamp["incident_id"]
+        ev.environment = stamp["environment"]
+        ev.timestamp = ev.timestamp or stamp["timestamp"]
+    for hyp in outcome.hypotheses:
+        hyp.incident_id = stamp["incident_id"]
+
+
 async def _log_evidence(
     incident: Incident, llm, classification: ClassificationResult | None = None
 ) -> Evidence:
@@ -64,22 +100,50 @@ async def _log_evidence(
 
     Delegates to analyze_logs_with_fallback which uses the LLM agent when
     available, or falls back to deterministic keyword analysis internally.
+
+    Severity is grounded ONLY in log telemetry (attached raw logs or retrieved
+    model-data log documents). With zero log telemetry the finding can never
+    read like a "log analysis confirms ..." claim -- the incident description
+    (REPORTED) is never silently upgraded to an observed log signal.
     """
     try:
         result = await analyze_logs_with_fallback(incident, classification, llm)
         finding = result.summary or "Log analysis completed."
-        matched = _keyword_signals(
-            list(incident.raw_logs) + [incident.description] + [
-                str(a.get("alert_name") or a.get("name") or "") if isinstance(a, dict) else str(a)
-                for a in incident.raw_alerts
-            ]
-        )
+        raw0 = dict(result.evidence[0].raw_data) if result.evidence else {}
+        retrieved_documents = int(raw0.get("retrieved_documents") or 0)
+        telemetry_available = raw0.get("telemetry_available")
+        if telemetry_available is None:
+            telemetry_available = bool(incident.raw_logs) or retrieved_documents > 0
+        has_log_telemetry = bool(telemetry_available)
+
+        if has_log_telemetry:
+            severity = "high" if raw0.get("telemetry_signals") else "info"
+            provenance = EvidenceProvenance.OBSERVED
+        else:
+            severity = "info"
+            provenance = EvidenceProvenance.REPORTED
+            if _looks_like_confirmation(finding):
+                finding = (
+                    "No log telemetry available for this incident (no raw logs "
+                    "attached and no model-data log documents retrieved); log "
+                    "analysis cannot confirm any symptom from logs."
+                )
+
+        # Signals reported to the caller (always recomputed so the log agent's
+        # dependency surface stays testable/monkeypatchable).
+        matched = list(raw0.get("telemetry_signals") or [])
+        matched.extend(_keyword_signals(list(incident.raw_logs)))
         return Evidence(
             evidence_id="ev-log-1",
             source="log_analysis",
             finding=finding,
-            severity="high" if matched else "info",
-            raw_data={"matched_signals": matched[:10], "log_count": len(incident.raw_logs)},
+            severity=severity,
+            provenance=provenance,
+            raw_data={
+                "matched_signals": matched[:10],
+                "log_count": len(incident.raw_logs),
+                "retrieved_documents": retrieved_documents,
+            },
         )
     except Exception as exc:  # noqa: BLE001 -- degrade, never kill the run
         return Evidence(
@@ -87,6 +151,7 @@ async def _log_evidence(
             source="log_analysis",
             finding=f"Log analysis failed: {exc}",
             severity="info",
+            provenance=EvidenceProvenance.REPORTED,
             raw_data={"error": str(exc)},
         )
 
@@ -115,6 +180,11 @@ async def _kubernetes_evidence(
             source="kubernetes",
             finding=finding,
             severity="medium" if degraded else "info",
+            provenance=(
+                result.evidence[0].provenance
+                if result.evidence
+                else EvidenceProvenance.REPORTED
+            ),
             raw_data=raw,
         )
     except Exception as exc:  # noqa: BLE001
@@ -123,6 +193,7 @@ async def _kubernetes_evidence(
             source="kubernetes",
             finding=f"Kubernetes analysis failed: {exc}",
             severity="info",
+            provenance=EvidenceProvenance.REPORTED,
             raw_data={"error": str(exc)},
         )
 
@@ -154,6 +225,9 @@ def _runbook_evidence(
             source="runbook",
             finding=finding,
             severity="info" if result.score < MIN_RELEVANCE_SCORE else "medium",
+            # Runbook matches are CONTEXT: remediation guidance, never proof
+            # the symptom occurred.
+            provenance=EvidenceProvenance.CONTEXT,
             raw_data=raw,
         )
         return evidence, result.hypothesis
@@ -164,6 +238,7 @@ def _runbook_evidence(
             source="runbook",
             finding=reason,
             severity="info",
+            provenance=EvidenceProvenance.CONTEXT,
             raw_data={"matched_runbooks": []},
         ),
         None,
@@ -210,6 +285,8 @@ def _synthesize_outcome(
         supporting_evidence=[e.evidence_id for e in evidence if e.severity != "info"],
         contradicting_evidence=[],
         label=HypothesisLabel.LIKELY if confidence >= 0.7 else HypothesisLabel.POSSIBLE,
+        # Aggregated conclusion derived by reasoning over the sub-agents' outputs.
+        provenance=EvidenceProvenance.INFERRED,
     )
     hypotheses = [primary]
     if runbook_hypothesis is not None:
@@ -264,6 +341,7 @@ async def run_investigation(
             runbook_name=result.get("runbook_name"),
             runbook_solution=result.get("runbook_solution"),
         )
+        _stamp_incident_scope(outcome, incident)
         agent_output(
             "InvestigationOrchestrator",
             f"confidence={outcome.confidence:.2f} evidence={len(outcome.evidence)} "

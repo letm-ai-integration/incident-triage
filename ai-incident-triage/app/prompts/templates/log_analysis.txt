@@ -7,7 +7,13 @@ Instructions:
 1. Identify any explicit ERROR or WARN log lines.
 2. Group related errors into specific findings (Evidence).
 3. If the logs indicate a potential root cause or contributing factor, formulate a Hypothesis.
-4. Output your analysis strictly in the JSON format requested.
+4. Mark each finding's provenance truthfully:
+   - "OBSERVED": the finding is directly supported by the log lines provided.
+   - "REPORTED": the finding comes from the incident description only, not from logs.
+   - "CONTEXT": retrieved from a runbook/knowledge base (not applicable here).
+   - "INFERRED": a conclusion derived by reasoning over the log evidence.
+5. If no actual log lines are provided (only the incident description), do NOT claim the logs "confirm" anything. Say the log evidence is unavailable and mark findings REPORTED.
+6. Output your analysis strictly in the JSON format requested.
 
 Expected JSON Structure:
 {
@@ -15,8 +21,9 @@ Expected JSON Structure:
     {
       "evidence_id": "string (e.g., ev-log-1)",
       "source": "log_analysis",
-      "finding": "string (description of the error found)",
+      "finding": "string (description of the error found; must cite the actual log line)",
       "severity": "string (e.g., ERROR, WARN)",
+      "provenance": "OBSERVED|REPORTED|CONTEXT|INFERRED",
       "raw_data": {"log_snippet": "string"}
     }
   ],
@@ -27,8 +34,9 @@ Expected JSON Structure:
       "confidence": 0.8,
       "supporting_evidence": ["ev-log-1"],
       "contradicting_evidence": [],
-      "label": "LIKELY"
+      "label": "LIKELY",
+      "provenance": "INFERRED"
     }
   ],
-  "summary": "string (brief summary of log findings)"
+  "summary": "string (brief summary of log findings; say so explicitly if no log evidence was available)"
 }

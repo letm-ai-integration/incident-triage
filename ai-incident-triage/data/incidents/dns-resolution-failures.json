@@ -1,0 +1,64 @@
+{
+  "incident_id": "INC-DNS-5009",
+  "title": "DNS resolution failures causing intermittent service timeouts",
+  "description": "Roughly 12% of inventory-service to warehouse-api calls fail intermittently between 03:38-03:52 UTC with UnknownHostException while CoreDNS has only 2/3 pods ready. CoreDNS pod-health events and app-level DNS failures are both directly observed and time-correlated; the causal link between them is inferred from correlation, not proven by a single trace.",
+  "source": "mock",
+  "service": "inventory-service",
+  "environment": "PRODUCTION",
+  "priority_hint": "P2",
+  "tags": [
+    "dns",
+    "timeout",
+    "networking",
+    "intermittent"
+  ],
+  "timestamp": "2026-08-31T03:41:09.000Z",
+  "raw_logs": [
+    "{\"timestamp\": \"2026-08-31T03:41:09.884213Z\", \"sequence\": 9901, \"level\": \"ERROR\", \"loggerName\": \"com.mockcorp.commerce.inventoryservice.client.WarehouseApiClient\", \"message\": \"java.net.UnknownHostException: warehouse-api.internal.mockcorp.svc.cluster.local: Name or service not known\", \"threadName\": \"executor-thread-3\", \"threadId\": 88, \"IMAGE_TAG\": \"4.1.7\", \"environment\": \"production\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\"}",
+    "{\"timestamp\": \"2026-08-31T03:41:09.912440Z\", \"sequence\": 9902, \"level\": \"WARN\", \"loggerName\": \"com.mockcorp.commerce.inventoryservice.client.WarehouseApiClient\", \"message\": \"DNS lookup retry 1/3 for warehouse-api.internal.mockcorp.svc.cluster.local\", \"threadName\": \"executor-thread-3\", \"threadId\": 88, \"IMAGE_TAG\": \"4.1.7\", \"environment\": \"production\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\"}",
+    "{\"timestamp\": \"2026-08-31T03:41:12.230981Z\", \"sequence\": 9910, \"level\": \"ERROR\", \"loggerName\": \"com.mockcorp.commerce.inventoryservice.client.WarehouseApiClient\", \"message\": \"DNS lookup failed after 3 retries, request timed out at 3000ms\", \"threadName\": \"executor-thread-3\", \"threadId\": 88, \"IMAGE_TAG\": \"4.1.7\", \"environment\": \"production\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\"}"
+  ],
+  "raw_events": [
+    {
+      "type": "Warning",
+      "reason": "CoreDNSHighLatency",
+      "object": "deployment/coredns",
+      "message": "CoreDNS pod coredns-6d4b75cb6d-8xqzp p99 query latency 4200ms, exceeding 2000ms threshold",
+      "timestamp": "2026-08-31T03:40:55Z"
+    },
+    {
+      "type": "Warning",
+      "reason": "Unhealthy",
+      "object": "pod/coredns-6d4b75cb6d-8xqzp",
+      "message": "Readiness probe failed: dial tcp: connect: connection refused",
+      "timestamp": "2026-08-31T03:41:02Z"
+    }
+  ],
+  "raw_alerts": [
+    {
+      "alert_name": "CoreDNSDegradation",
+      "severity": "warning",
+      "fired_at": "2026-08-31T03:40:55.000Z",
+      "labels": {
+        "service": "inventory-service",
+        "namespace": "prod"
+      }
+    }
+  ],
+  "raw_metrics": {
+    "failure_rate_pct": 12,
+    "coredns_ready_pods": 2,
+    "coredns_total_pods": 3
+  },
+  "metadata": {
+    "scenario_id": "INC-DNS-5009",
+    "service": "inventory-service",
+    "namespace": "prod",
+    "data_sources": [
+      "logs_traces",
+      "k8s_logs",
+      "metrics"
+    ],
+    "runbook": "CoreDNS Degradation Remediation"
+  }
+}

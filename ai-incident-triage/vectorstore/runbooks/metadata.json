@@ -150,5 +150,269 @@
       "source_file": "runbooks/pod-crash-loop.md",
       "title": "Troubleshooting"
     }
+  },
+  {
+    "id": "runbooks/cache-stampede.md::0::Overview",
+    "text": "## Overview\n\nA cache (Redis) restart or eviction empties the hot set: hit rate collapses,\nread traffic floods the backing database, and latency spikes until the cache\nrepopulates. Restart→load-spike timing is directly observed; that the restart is\nthe cause (vs another driver of the DB load) is a well-supported but inferred\nconclusion.",
+    "metadata": {
+      "source_file": "runbooks/cache-stampede.md",
+      "title": "Overview"
+    }
+  },
+  {
+    "id": "runbooks/cache-stampede.md::1::Solution",
+    "text": "## Solution\n\n1. Confirm timing correlation between the Redis restart and the DB load spike.\n2. If recurring, implement cache warm-up on Redis startup for high-traffic keys.\n3. Add request coalescing/single-flight locking so concurrent misses for the\n   same key trigger one DB read.\n4. Add jittered TTL stagger on cache writes.\n5. Consider a Redis replica/failover topology.",
+    "metadata": {
+      "source_file": "runbooks/cache-stampede.md",
+      "title": "Solution"
+    }
+  },
+  {
+    "id": "runbooks/cache-stampede.md::2::Troubleshooting",
+    "text": "## Troubleshooting\n\n- Redis restart/eviction event + hit-rate drop + pool exhaustion/DB QPS spike →\n   apply this runbook.\n- Hit-rate drop with no cache event → investigate other cache-invalidating\n  changes before warming the cache.",
+    "metadata": {
+      "source_file": "runbooks/cache-stampede.md",
+      "title": "Troubleshooting"
+    }
+  },
+  {
+    "id": "runbooks/container-memory-limit.md::0::Overview",
+    "text": "## Overview\n\nA container's memory usage sits at ~100% of its configured limit with no\ngrowing trend — the workload is simply under-provisioned for steady-state\nload. Flat saturation (no leak signature) is the discriminating signal: the fix\nis capacity, not a code change.",
+    "metadata": {
+      "source_file": "runbooks/container-memory-limit.md",
+      "title": "Overview"
+    }
+  },
+  {
+    "id": "runbooks/container-memory-limit.md::1::Solution",
+    "text": "## Solution\n\n1. Increase the memory limit with 20–30% headroom above steady-state:\n   ```yaml\n   resources:\n     requests:\n       memory: \"1Gi\"\n     limits:\n       memory: \"1.5Gi\"   # or \"2Gi\" depending on spike behavior\n   ```\n2. Re-apply and watch steady-state usage stay below ~70–80% of the new limit.\n3. If usage starts climbing over time instead of staying flat, re-open the\n   case — growth-over-time is a leak signature, not under-provisioning.",
+    "metadata": {
+      "source_file": "runbooks/container-memory-limit.md",
+      "title": "Solution"
+    }
+  },
+  {
+    "id": "runbooks/container-memory-limit.md::2::Troubleshooting",
+    "text": "## Troubleshooting\n\n- Flat `memory_pct ≈ 100%` + no upward trend across many hours → steady-state\n  under-provisioning; raise the limit.\n- `memory_pct` climbing monotonically until OOMKill → leak; investigate the\n  allocation path before just raising the limit.",
+    "metadata": {
+      "source_file": "runbooks/container-memory-limit.md",
+      "title": "Troubleshooting"
+    }
+  },
+  {
+    "id": "runbooks/coredns-degradation.md::0::Overview",
+    "text": "## Overview\n\nInternal DNS resolution starts failing intermittently (`UnknownHostException`,\nretries, timeouts) because CoreDNS itself is degraded — high query latency,\nunhealthy/restarting pods, or only a subset of replicas Ready. App-level\nfailures and CoreDNS pod events are time-correlated; the causal link is inferred\nfrom that correlation.",
+    "metadata": {
+      "source_file": "runbooks/coredns-degradation.md",
+      "title": "Overview"
+    }
+  },
+  {
+    "id": "runbooks/coredns-degradation.md::1::Solution",
+    "text": "## Solution\n\n1. Check CoreDNS pod health cluster-wide.\n2. Scale up CoreDNS replicas or restart the unhealthy pod(s).\n3. Check for a recent NetworkPolicy/ConfigMap change around the incident window.\n4. Ensure client-side DNS caching and connection retry/backoff are configured\n   for internal clients.\n5. Add an alert on CoreDNS readiness/query latency specifically.",
+    "metadata": {
+      "source_file": "runbooks/coredns-degradation.md",
+      "title": "Solution"
+    }
+  },
+  {
+    "id": "runbooks/coredns-degradation.md::2::Troubleshooting",
+    "text": "## Troubleshooting\n\n- `UnknownHostException` + `CoreDNSHighLatency`/unhealthy CoreDNS pod events →\n   apply this runbook.\n- `UnknownHostException` with healthy CoreDNS → application DNS config or\n  upstream resolver; verify before scaling CoreDNS.",
+    "metadata": {
+      "source_file": "runbooks/coredns-degradation.md",
+      "title": "Troubleshooting"
+    }
+  },
+  {
+    "id": "runbooks/database-deadlock.md::0::Overview",
+    "text": "## Overview\n\nPostgres aborts transactions with deadlock detection errors: independent\ntransactions take locks in conflicting orders and get rolled back, surfacing a\nrising transaction error rate. Deadlocks and rollbacks are directly observed in\nlogs; the exact code path creating the lock-order inversion is not proven here\nand needs further verification.",
+    "metadata": {
+      "source_file": "runbooks/database-deadlock.md",
+      "title": "Overview"
+    }
+  },
+  {
+    "id": "runbooks/database-deadlock.md::1::Solution",
+    "text": "## Solution\n\n1. Capture deadlock details and identify the conflicting transaction/lock order.\n2. Standardize lock acquisition order where applicable.\n3. Keep transactions short; avoid unnecessary lock duration.\n4. Validate deadlock frequency/error rate after the change.",
+    "metadata": {
+      "source_file": "runbooks/database-deadlock.md",
+      "title": "Solution"
+    }
+  },
+  {
+    "id": "runbooks/database-deadlock.md::2::Troubleshooting",
+    "text": "## Troubleshooting\n\n- `deadlock detected` rollback pairs for distinct transactions, error rate above\n  baseline → apply this runbook.\n- Rollbacks without `deadlock detected` → different cause (constraint failures,\n  timeouts); do not treat as a deadlock.",
+    "metadata": {
+      "source_file": "runbooks/database-deadlock.md",
+      "title": "Troubleshooting"
+    }
+  },
+  {
+    "id": "runbooks/disk-space-exhaustion.md::0::Overview",
+    "text": "## Overview\n\nA persistent volume fills up and the database can no longer write WAL files\n(`No space left on device`), forcing read-only recovery mode. The high-usage\nfigure is directly observed; which table/log stream drives the growth is an\ninference from the trailing trend unless a per-table breakdown isolates it.",
+    "metadata": {
+      "source_file": "runbooks/disk-space-exhaustion.md",
+      "title": "Overview"
+    }
+  },
+  {
+    "id": "runbooks/disk-space-exhaustion.md::1::Solution",
+    "text": "## Solution\n\n1. Confirm free space on the affected PVC.\n2. Immediate: prune/archive oldest `audit_log` partitions and clear\n   already-shipped WAL segments.\n3. Expand the PVC if the storage class supports online expansion.\n4. Root-cause fix: add retention/partitioning on the unbounded-growth table.\n5. Add disk-usage alerts at 80%/90% thresholds.",
+    "metadata": {
+      "source_file": "runbooks/disk-space-exhaustion.md",
+      "title": "Solution"
+    }
+  },
+  {
+    "id": "runbooks/disk-space-exhaustion.md::2::Troubleshooting",
+    "text": "## Troubleshooting\n\n- `No space left on device` + `FreeDiskSpaceFailed` PVC event at ~99% → apply\n  this runbook; prune then size.\n- Disk usage rising but still under 80% → monitor; no immediate action.",
+    "metadata": {
+      "source_file": "runbooks/disk-space-exhaustion.md",
+      "title": "Troubleshooting"
+    }
+  },
+  {
+    "id": "runbooks/downstream-rate-limiting.md::0::Overview",
+    "text": "## Overview\n\nElevated 5xx/502 responses on the caller surface because a downstream partner\nAPI is rate-limiting traffic (a wave of `429 Too Many Requests`). The caller's\nown traffic may be steady; the partner's effective limit dropped or was newly\nenforced. Retrying hard surfaces a 502 instead of degrading gracefully.",
+    "metadata": {
+      "source_file": "runbooks/downstream-rate-limiting.md",
+      "title": "Overview"
+    }
+  },
+  {
+    "id": "runbooks/downstream-rate-limiting.md::1::Solution",
+    "text": "## Solution\n\n1. Confirm the 5xx spike correlates with 429s from a specific downstream\n   partner via log/trace correlation.\n2. Check the partner's status page/changelog for a recently lowered limit or\n   ongoing incident.\n3. Tighten client-side rate limiting and exponential backoff-with-jitter to\n   stay under the partner's limit.\n4. If supported, request a temporary limit increase or a dedicated higher-tier\n   API key.\n5. Add a circuit breaker so repeated 429s degrade gracefully instead of\n   surfacing a hard 502.",
+    "metadata": {
+      "source_file": "runbooks/downstream-rate-limiting.md",
+      "title": "Solution"
+    }
+  },
+  {
+    "id": "runbooks/downstream-rate-limiting.md::2::Troubleshooting",
+    "text": "## Troubleshooting\n\n- `429` bursts from the partner + hard `502` after retry budget exhaustion →\n  partner limit; throttle and open a circuit breaker.\n- 5xx rise with no partner 429s → investigate internally; this runbook does not\n  apply.",
+    "metadata": {
+      "source_file": "runbooks/downstream-rate-limiting.md",
+      "title": "Troubleshooting"
+    }
+  },
+  {
+    "id": "runbooks/kafka-consumer-lag.md::0::Overview",
+    "text": "## Overview\n\nA consumer group falls behind its producers on one or more partitions: group\nlag grows while per-message processing time and/or missing parallelism throttle\nthroughput. Lag and the throughput imbalance are directly observed; whether\nscaling consumers alone resolves it depends on whether per-message processing\ntime is the true bottleneck.",
+    "metadata": {
+      "source_file": "runbooks/kafka-consumer-lag.md",
+      "title": "Overview"
+    }
+  },
+  {
+    "id": "runbooks/kafka-consumer-lag.md::1::Solution",
+    "text": "## Solution\n\n1. Identify whether processing latency or insufficient parallelism is the\n   limiting factor.\n2. Scale consumers where partitioning allows.\n3. Review `max.poll.interval.ms` and batch size against measured processing time.\n4. Monitor lag/throughput after the change.",
+    "metadata": {
+      "source_file": "runbooks/kafka-consumer-lag.md",
+      "title": "Solution"
+    }
+  },
+  {
+    "id": "runbooks/kafka-consumer-lag.md::2::Troubleshooting",
+    "text": "## Troubleshooting\n\n- Growing `groupLag` + `processingTime` at/above threshold → per-message\n  latency limited; fix the slow processing path first.\n- `groupLag` growing with `processingTime` well below threshold → parallelism\n  limited; scale consumers.",
+    "metadata": {
+      "source_file": "runbooks/kafka-consumer-lag.md",
+      "title": "Troubleshooting"
+    }
+  },
+  {
+    "id": "runbooks/oomkilled-crashloopbackoff.md::0::Overview",
+    "text": "## Overview\n\nA pod is repeatedly terminated by the kubelet with `OOMKilled` and entering\nCrashLoopBackOff. A bursty job inside the container (batch refresh, large\nallocations) exceeds the memory limit and gets exit code 137. The OOMKilled\nevent plus exit 137 prove the kill mechanism; what spiked memory may still need\nheap-dump confirmation.",
+    "metadata": {
+      "source_file": "runbooks/oomkilled-crashloopbackoff.md",
+      "title": "Overview"
+    }
+  },
+  {
+    "id": "runbooks/oomkilled-crashloopbackoff.md::1::Solution",
+    "text": "## Solution\n\n1. Confirm OOMKilled via `kubectl describe pod` (Last State: Terminated,\n   Reason: OOMKilled, Exit Code: 137).\n2. Identify the specific job/process causing the burst (here, `ModelRefreshJob`).\n3. Short-term: raise the memory limit with headroom (2Gi → 3Gi).\n4. Medium-term: capture a heap dump on next OOM to find the actual spike source.\n5. Consider isolating the batch job into its own pod/CronJob with a separate\n   resource envelope.",
+    "metadata": {
+      "source_file": "runbooks/oomkilled-crashloopbackoff.md",
+      "title": "Solution"
+    }
+  },
+  {
+    "id": "runbooks/oomkilled-crashloopbackoff.md::2::Troubleshooting",
+    "text": "## Troubleshooting\n\n- `OOMKilling` event + `Back-off restarting failed container` + exit `137` →\n  memory limit exceeded; confirm the exact job before resizing.\n- Only `CrashLoopBackOff` without an `OOMKilling` event → different restart\n  cause (e.g. liveness failure); do not assume OOM.",
+    "metadata": {
+      "source_file": "runbooks/oomkilled-crashloopbackoff.md",
+      "title": "Troubleshooting"
+    }
+  },
+  {
+    "id": "runbooks/readiness-probe-misconfiguration.md::0::Overview",
+    "text": "## Overview\n\nReplicas never become Ready because the readiness probe's `timeoutSeconds` is\nshorter than the endpoint's real response time, so the ingress returns 503\n\"no ready endpoints\". The process itself never crashed (restart count 0) — this\nis a configuration problem, not service instability, and a restart is not the\nfix.",
+    "metadata": {
+      "source_file": "runbooks/readiness-probe-misconfiguration.md",
+      "title": "Overview"
+    }
+  },
+  {
+    "id": "runbooks/readiness-probe-misconfiguration.md::1::Solution",
+    "text": "## Solution\n\n1. Verify readiness timeout/initial-delay/failure-threshold against measured\n   readiness latency.\n2. Adjust probe configuration to tolerate the validated latency.\n3. Roll out via the normal deployment process.\n4. Confirm all replicas become Ready and re-check availability/503 metrics.",
+    "metadata": {
+      "source_file": "runbooks/readiness-probe-misconfiguration.md",
+      "title": "Solution"
+    }
+  },
+  {
+    "id": "runbooks/readiness-probe-misconfiguration.md::2::Troubleshooting",
+    "text": "## Troubleshooting\n\n- Readiness probe `timeout=1s` failing while the endpoint responds in ~1.8s +\n  restart count `0` → misconfigured timeout; raise it via this runbook.\n- Readiness failing with process restarts > 0 → actual service problem; treat\n  as instability, not config.",
+    "metadata": {
+      "source_file": "runbooks/readiness-probe-misconfiguration.md",
+      "title": "Troubleshooting"
+    }
+  },
+  {
+    "id": "runbooks/service-availability-traffic-spike.md::0::Overview",
+    "text": "## Overview\n\nA sudden traffic increase exceeds current replica/connection capacity, so\navailability drops, HTTP 503s rise and latency climbs while HPA scaling lags\nbehind demand. Reduced availability, elevated traffic, connection saturation\nand delayed scaling are directly observed; a restart is not proven necessary and\ntimeouts alone would not have prevented this.",
+    "metadata": {
+      "source_file": "runbooks/service-availability-traffic-spike.md",
+      "title": "Overview"
+    }
+  },
+  {
+    "id": "runbooks/service-availability-traffic-spike.md::1::Solution",
+    "text": "## Solution\n\n1. Increase replicas/capacity to absorb sustained traffic above target.\n2. Verify HPA target, cooldown, and scale-up speed against demand.\n3. Validate connection limits and request timeouts after scaling.\n4. Restart individual unhealthy pods only after confirming capacity is\n   available.",
+    "metadata": {
+      "source_file": "runbooks/service-availability-traffic-spike.md",
+      "title": "Solution"
+    }
+  },
+  {
+    "id": "runbooks/service-availability-traffic-spike.md::2::Troubleshooting",
+    "text": "## Troubleshooting\n\n- `request_rate` above target + `connection pool exhausted`/`503` + HPA\n  `currentReplicas < desiredReplicas` → scale out and re-check HPA.\n- 503s with replicas already above demand → look elsewhere (dependencies,\n  config); do not scale blindly.",
+    "metadata": {
+      "source_file": "runbooks/service-availability-traffic-spike.md",
+      "title": "Troubleshooting"
+    }
+  },
+  {
+    "id": "runbooks/tls-certificate-expiration.md::0::Overview",
+    "text": "## Overview\n\nOutbound TLS connections to an upstream provider fail during handshake because\nthe presented certificate has expired. Internal service health stays UP — the\nfailure is scoped to the specific TLS endpoint. Expiry and handshake failures\nare directly observed; the certificate is not considered replaced until\nexecution evidence exists.",
+    "metadata": {
+      "source_file": "runbooks/tls-certificate-expiration.md",
+      "title": "Overview"
+    }
+  },
+  {
+    "id": "runbooks/tls-certificate-expiration.md::1::Solution",
+    "text": "## Solution\n\n1. Confirm certificate chain and expiry on the affected endpoint.\n2. Renew/replace the expired certificate via the approved cert-management\n   process.\n3. Reload/redeploy the affected TLS client config if required.\n4. Validate successful handshakes and delivery after the change.",
+    "metadata": {
+      "source_file": "runbooks/tls-certificate-expiration.md",
+      "title": "Solution"
+    }
+  },
+  {
+    "id": "runbooks/tls-certificate-expiration.md::2::Troubleshooting",
+    "text": "## Troubleshooting\n\n- `TLS handshake failed` + `certificate has expired` + internal health UP →\n   renew the affected endpoint cert via this runbook.\n- Handshake failures without an expiry in the reason → key usage/hostname\n  mismatch; verify the chain before renewal.",
+    "metadata": {
+      "source_file": "runbooks/tls-certificate-expiration.md",
+      "title": "Troubleshooting"
+    }
   }
 ]

@@ -1,0 +1,57 @@
+{
+  "incident_id": "INC-AVAIL-5005",
+  "title": "Service availability degradation from readiness probe misconfiguration",
+  "description": "Only 2 of 4 search-service replicas are Ready and the ingress returns 503 (no ready endpoints): the readiness probe times out at 1s while the endpoint actually responds in 1.8s, and availability sits at 99.1% with a 0.9% 503 rate. Restart count of 0 proves the process itself never crashed. Readiness timeouts and the reduced ready-replica count are directly observed; do not claim a restart is necessary -- this is a healthy, non-causal indicator that must not be treated as a cause.",
+  "source": "mock",
+  "service": "search-service",
+  "environment": "STAGING",
+  "priority_hint": "P2",
+  "tags": [
+    "availability",
+    "readiness-probe",
+    "kubernetes",
+    "misconfiguration"
+  ],
+  "timestamp": "2026-09-04T20:05:00.000Z",
+  "raw_logs": [
+    "{\"timestamp\": \"2026-09-04T20:04:41.022Z\", \"sequence\": 90101, \"level\": \"INFO\", \"loggerName\": \"com.mockcorp.commerce.searchservice.app.startup.SearchService\", \"message\": \"startup completed elapsed=31s\", \"threadName\": \"executor-thread-1\", \"threadId\": 80, \"IMAGE_TAG\": \"3.0.5\", \"environment\": \"staging\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\"}",
+    "{\"timestamp\": \"2026-09-04T20:04:43.601Z\", \"sequence\": 90102, \"level\": \"WARN\", \"loggerName\": \"kubelet\", \"message\": \"pod=search-service-6c7d8f9f5b-r4n2m readiness probe failed path=/ready timeout=1s\", \"threadName\": \"kubelet\", \"threadId\": 4, \"IMAGE_TAG\": \"3.0.5\", \"environment\": \"staging\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\"}",
+    "{\"timestamp\": \"2026-09-04T20:04:45.882Z\", \"sequence\": 90103, \"level\": \"WARN\", \"loggerName\": \"kubelet\", \"message\": \"pod=search-service-6c7d8f9f5b-r4n2m container=search-service reason=\\\"Readiness probe timeout\\\"\", \"threadName\": \"kubelet\", \"threadId\": 4, \"IMAGE_TAG\": \"3.0.5\", \"environment\": \"staging\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\"}",
+    "{\"timestamp\": \"2026-09-04T20:04:49.117Z\", \"sequence\": 90104, \"level\": \"INFO\", \"loggerName\": \"com.mockcorp.commerce.searchservice.app.health.ReadinessEndpoint\", \"message\": \"readiness endpoint response=200 elapsed=1.8s\", \"threadName\": \"executor-thread-1\", \"threadId\": 80, \"IMAGE_TAG\": \"3.0.5\", \"environment\": \"staging\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\"}",
+    "{\"timestamp\": \"2026-09-04T20:04:51.443Z\", \"sequence\": 90105, \"level\": \"WARN\", \"loggerName\": \"kubelet\", \"message\": \"pod=search-service-6c7d8f9f5b-k8w1q readiness probe failed path=/ready timeout=1s\", \"threadName\": \"kubelet\", \"threadId\": 4, \"IMAGE_TAG\": \"3.0.5\", \"environment\": \"staging\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\"}",
+    "{\"timestamp\": \"2026-09-04T20:05:02.704Z\", \"sequence\": 90106, \"level\": \"ERROR\", \"loggerName\": \"ingress-controller\", \"message\": \"ingress search-service status=503 upstream=\\\"no ready endpoints\\\"\", \"threadName\": \"ingress-controller\", \"threadId\": 5, \"IMAGE_TAG\": \"3.0.5\", \"environment\": \"staging\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\"}",
+    "{\"timestamp\": \"2026-09-04T20:05:18.312Z\", \"sequence\": 90107, \"level\": \"INFO\", \"loggerName\": \"com.mockcorp.commerce.searchservice.app.startup.SearchService\", \"message\": \"process_status=RUNNING ready_endpoint=200\", \"threadName\": \"executor-thread-1\", \"threadId\": 80, \"IMAGE_TAG\": \"3.0.5\", \"environment\": \"staging\", \"loggerClassName\": \"org.slf4j.impl.Slf4jLogger\", \"mdc\": {\"affiliate_code\": \"001\"}, \"processName\": \"/work/quarkus/application\", \"processId\": 1, \"region\": \"us-east-1\"}"
+  ],
+  "raw_events": [],
+  "raw_alerts": [
+    {
+      "alert_name": "ServiceAvailabilityDegraded",
+      "severity": "warning",
+      "fired_at": "2026-09-04T20:05:00.000Z",
+      "labels": {
+        "service": "search-service",
+        "namespace": "staging"
+      }
+    }
+  ],
+  "raw_metrics": {
+    "available_replicas": 2,
+    "ready_replicas": 2,
+    "total_replicas": 4,
+    "availability_pct": 99.1,
+    "readiness_timeout_s": 1,
+    "readiness_response_s": 1.8,
+    "http_503_rate_pct": 0.9,
+    "pod_restarts": 0
+  },
+  "metadata": {
+    "scenario_id": "INC-AVAIL-5005",
+    "service": "search-service",
+    "namespace": "staging",
+    "data_sources": [
+      "k8s_logs",
+      "metrics"
+    ],
+    "runbook": "Readiness Probe Misconfiguration Remediation"
+  }
+}

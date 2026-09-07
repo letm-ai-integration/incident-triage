@@ -181,7 +181,9 @@ def test_end_to_end_via_default_orchestrator_node():
         "log_analysis", "kubernetes", "runbook"
     }
     assert result["investigation_summary"]["evidence_count"] >= 3
-    assert result["is_resolved"] is True
+    # Phase 4: investigate-only gate -- no recovery telemetry supplied by the
+    # mock incident, so it reaches notification unresolved.
+    assert result["is_resolved"] is False
     assert result["notification_status"] == NotificationStatus.NOTIFIED
     assert not result.get("errors")
 
@@ -277,8 +279,8 @@ def test_subagent_results_appear_in_investigation_state():
 
 def test_end_to_end_lifecycle_logs_present(caplog):
     """Verify the lifecycle logging trace is present when running through the graph."""
-    import logging
     import json
+    import logging
 
     with caplog.at_level(logging.INFO, logger="app.lifecycle"):
         _run_graph(json.loads((INCIDENTS / "database_timeout.json").read_text(encoding="utf-8")))

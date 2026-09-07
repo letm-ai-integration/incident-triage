@@ -12,6 +12,7 @@ import logging
 
 from app.agents.investigation.runbook import resolver
 from app.domain.models.classification import ClassificationResult
+from app.domain.enums.provenance import EvidenceProvenance
 from app.domain.models.hypothesis import Hypothesis, HypothesisLabel
 from app.graph.state import RunbookResult, RunbookStatus
 from app.knowledge.retriever import RetrievedChunk, retrieve
@@ -133,6 +134,9 @@ def _named_match_result(doc: "RunbookDoc", score: float | None = None) -> Runboo
         supporting_evidence=[f"runbook:{doc.file}:{doc.name}"],
         contradicting_evidence=[],
         label=HypothesisLabel.LIKELY if confidence >= 0.8 else HypothesisLabel.POSSIBLE,
+        # Runbook content is remediation guidance, never proof the symptom
+        # occurred -- it must never be treated as observed incident evidence.
+        provenance=EvidenceProvenance.CONTEXT,
     )
     return RunbookResult(
         status=RunbookStatus.MATCHED,
@@ -154,6 +158,7 @@ def _hypothesis_from_chunk(chunk: "RetrievedChunk") -> Hypothesis:
         supporting_evidence=[f"runbook:{chunk.metadata.get('source_file')}:{chunk.metadata.get('title')}"],
         contradicting_evidence=[],
         label=HypothesisLabel.LIKELY if chunk.score >= 0.8 else HypothesisLabel.POSSIBLE,
+        provenance=EvidenceProvenance.CONTEXT,
     )
 
 

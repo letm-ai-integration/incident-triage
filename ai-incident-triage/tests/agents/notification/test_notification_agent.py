@@ -64,6 +64,7 @@ def _report() -> IncidentReport:
             needs_reinvestigation=False,
         ),
         created_at=datetime(2026, 1, 1, tzinfo=UTC),
+        environment="staging",
     )
 
 
@@ -126,6 +127,15 @@ def test_llm_prompt_is_composed_from_report_fields(monkeypatch):
     assert "connection pool exhaustion in payments-api" in prompt
     assert "increase max connections to 200" in prompt
     assert "ayush.sharma@example.com" in prompt
+    # The prompt must carry every field the nine canonical sections need.
+    assert "environment: staging" in prompt
+    assert "affected_services: payments-api" in prompt
+    assert "priority: P1" in prompt
+    assert "root_cause_determination: Confirmed root cause" in prompt
+    assert "contributing_factors:" in prompt
+    assert "investigation_findings:" in prompt
+    assert "impact_independently_observed:" in prompt
+    assert "runbook_status: No applicable runbook found" in prompt
 
 
 def test_send_failure_returns_error_result(monkeypatch):
@@ -197,3 +207,84 @@ def test_parser_raises_on_missing_structured_response():
 def test_parser_raises_on_wrong_type():
     with pytest.raises(TypeError, match="structured_response"):
         parse_notification_response({"structured_response": {"not": "a model"}})
+
+
+def test_template_fallback_uses_canonical_structure_and_honest_remediation():
+    from app.agents.notification.agent import _draft_email_template
+
+    report = _report().model_copy(
+        update={
+            "verification": VerificationResult(
+                is_resolved=False, needs_reinvestigation=True
+            )
+        }
+    )
+    email = _draft_email_template(report)
+
+    assert "(remediation pending)" in email.subject
+    # Full Phase 5 canonical template: all nine sections, in order.
+    headings = [
+        "Incident Summary",
+        "Incident Overview",
+        "Environment",
+        "Impacted Services",
+        "Impact Assessment",
+        "Investigation Findings",
+        "Root Cause Analysis",
+        "Recommended Remediation",
+        "Investigation Status",
+    ]
+    positions = [email.body.index(h) for h in headings]
+    assert positions == sorted(positions), [(h, p) for h, p in zip(headings, positions)]
+    # Environment and priority must be visible and correctly populated, not
+    # inferred or invented.
+    assert "<h3>Environment</h3><p><b>Environment:</b> staging</p>" in email.body
+    assert "<td>P1</td>" in email.body  # the incident's actual priority
+    assert "Severity / Role" in email.body
+    assert "Runbook Status:" in email.body
+    assert "Remediation:" in email.body
+    assert "Contributing Factors" in email.body
+    assert "not yet executed" in email.body
+    for banned in ("fixed", "resolved", "remediated", "restarted", "scaled", "increased"):
+        assert banned not in email.body.lower()
+
+
+def test_template_fallback_resolved_subject_has_no_pending_suffix():
+    from app.agents.notification.agent import _draft_email_template
+
+    resolved = _report()
+    resolved = resolved.model_copy(
+        update={
+            "verification": VerificationResult(
+                is_resolved=True,
+                resolution_evidence="recovery verified from telemetry",
+                needs_reinvestigation=False,
+            )
+        }
+    )
+    email = _draft_email_template(resolved)
+    assert "(remediation pending)" not in email.subject
+    assert "Remediation:" in email.body
+
+
+def test_notification_system_prompt_requires_honest_status_and_canonical_sections():
+    from app.agents.notification.prompt import SYSTEM_PROMPT
+
+    for section in (
+        "Incident Summary",
+        "Incident Overview",
+        "Environment",
+        "Impacted Services",
+        "Impact Assessment",
+        "Investigation Findings",
+        "Root Cause Analysis",
+        "Recommended Remediation",
+        "Investigation Status",
+    ):
+        assert section in SYSTEM_PROMPT
+    assert "P1–P4 priority" in SYSTEM_PROMPT
+    assert "<Not Applied / Applied / Pending On-Call Action>" in SYSTEM_PROMPT
+    assert "All nine sections must appear" in SYSTEM_PROMPT
+    assert "remediation_status" in SYSTEM_PROMPT
+    assert "report's statuses" in SYSTEM_PROMPT
+    assert "verification_is_resolved" in SYSTEM_PROMPT
