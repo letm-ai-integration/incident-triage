@@ -8,7 +8,6 @@
 #
 # v2 routing:
 #   classification -> investigation | notification   (by Priority / IncidentType)
-#   approval       -> verification | notification    (approved vs rejected)
 #   verification   -> investigation | notification   (reinvestigate loop vs done)
 from __future__ import annotations
 
@@ -54,14 +53,6 @@ def route_after_classification(state: IncidentState) -> str:
     return decision
 
 
-def route_after_approval(state: IncidentState) -> str:
-    """Route to verification when approved, or to the rejection notification."""
-    approval = state.get("approval")
-    if approval is not None and not approval.approved:
-        return "rejected"
-    return "approved"
-
-
 def route_after_verification(state: IncidentState) -> str:
     """Route back to investigation when unresolved (retry loop) or to
     notification when resolved / retries are exhausted."""
@@ -75,6 +66,5 @@ def route_after_verification(state: IncidentState) -> str:
 
 __all__ = [
     "route_after_classification",
-    "route_after_approval",
     "route_after_verification",
 ]

@@ -2,7 +2,6 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from .approval import ApprovalDecision
 from .classification import ClassificationResult
 from .evidence import EvidenceCollection
 from .hypothesis import Hypothesis
@@ -24,7 +23,6 @@ class IncidentReport(BaseModel):
     recommended_actions: list[str] = Field(default_factory=list)
     runbook_references: list[RunbookReference] = Field(default_factory=list)
     verification: VerificationResult
-    approval: ApprovalDecision | None = None
     created_at: datetime
     report_version: int = 1
     # Incident-source facts carried for honest rendering (Phase 5): the report

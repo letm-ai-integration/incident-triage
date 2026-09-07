@@ -69,7 +69,6 @@ def _llm_configured() -> bool:
 def _build_raw_input_from_form() -> dict[str, Any]:
     form_state = st.session_state.get("form", {})
     tags = [t.strip() for t in form_state.get("tags", "").split(",") if t.strip()]
-    logs = [line for line in form_state.get("logs", "").splitlines() if line.strip()]
     raw: dict[str, Any] = {
         "title": form_state.get("title", ""),
         "description": form_state.get("description", ""),
@@ -78,7 +77,6 @@ def _build_raw_input_from_form() -> dict[str, Any]:
         "environment": form_state.get("environment", Environment.PRODUCTION.value),
         "tags": tags,
         "timestamp": form_state.get("timestamp", datetime.now(UTC)).isoformat(),
-        "logs": logs,
     }
     priority_hint = form_state.get("priority_hint")
     if priority_hint and priority_hint != "auto-detect":
@@ -105,7 +103,6 @@ def _validate_advanced_json(form_state: dict[str, Any]) -> str | None:
 
 def _render_sidebar() -> dict[str, Any]:
     st.sidebar.header("Run options")
-    auto_approve = st.sidebar.checkbox("Auto-approve", value=True, help="Skip human sign-off for P1/P2 or low-confidence incidents.")
 
     llm_available = _llm_configured()
     if not llm_available:
@@ -122,7 +119,6 @@ def _render_sidebar() -> dict[str, Any]:
     )
 
     deps: dict[str, Any] = {
-        "auto_approve": auto_approve,
         # Investigation/notification services work without an LLM key (they
         # fall back to deterministic sub-agent analysis internally), so they
         # are wired unconditionally -- same as the CLI entry point.
@@ -158,7 +154,6 @@ def _render_form_tab(samples: dict[str, dict[str, Any]]) -> None:
             "priority_hint": sample.get("priority_hint", "auto-detect"),
             "tags": ", ".join(sample.get("tags", [])),
             "timestamp": datetime.now(UTC),
-            "logs": "\n".join(sample.get("logs", [])),
             "events_json": json.dumps(sample.get("events", []), indent=2) if sample.get("events") else "",
             "alerts_json": json.dumps(sample.get("alerts", []), indent=2) if sample.get("alerts") else "",
             "metrics_json": json.dumps(sample.get("metrics", {}), indent=2) if sample.get("metrics") else "",
@@ -187,7 +182,6 @@ def _render_form_tab(samples: dict[str, dict[str, Any]]) -> None:
         form_state["timestamp"] = datetime.now(UTC)
 
     form_state["description"] = st.text_area("Description", value=form_state.get("description", ""), height=100)
-    form_state["logs"] = st.text_area("Log lines (one per line)", value=form_state.get("logs", ""), height=150)
 
     with st.expander("Advanced: events / alerts / metrics / metadata (raw JSON, optional)"):
         form_state["events_json"] = st.text_area("Events (JSON list)", value=form_state.get("events_json", ""), height=80)
@@ -429,14 +423,11 @@ def _render_final_result(result: dict[str, Any]) -> None:
         st.subheader(f"{incident.title}  ·  `{incident.incident_id}`")
         st.caption(f"{incident.environment.value} · {incident.service} · source: {incident.source}")
 
-    cols = st.columns(4)
+    cols = st.columns(3)
     if classification is not None:
         cols[0].metric("Type", classification.incident_type.value)
         cols[1].metric("Priority", classification.priority.value)
         cols[2].metric("Confidence", f"{classification.confidence:.0%}")
-    approval = result.get("approval")
-    if approval is not None:
-        cols[3].metric("Approval", "Approved" if approval.approved else "Rejected")
 
     report: IncidentReport | None = result.get("incident_report")
     if report is not None:

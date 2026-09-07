@@ -25,7 +25,6 @@ from datetime import UTC, datetime
 from typing import Any
 
 from app.agents.rca_report.agent import generate_root_cause_analysis
-from app.domain.models.approval import ApprovalDecision
 from app.domain.models.classification import ClassificationResult
 from app.domain.models.evidence import EvidenceCollection
 from app.domain.models.hypothesis import Hypothesis, HypothesisLabel
@@ -50,7 +49,6 @@ def build_incident_report(
     root_cause: RootCauseAnalysis,
     verification: VerificationResult,
     runbook_references: list[RunbookReference] | None = None,
-    approval: ApprovalDecision | None = None,
     created_at: datetime | None = None,
     incident_title: str | None = None,
     incident_description: str | None = None,
@@ -66,7 +64,6 @@ def build_incident_report(
         recommended_actions=_derive_recommended_actions(root_cause, runbook_references or []),
         runbook_references=runbook_references or [],
         verification=verification,
-        approval=approval,
         created_at=created_at or datetime.now(UTC),
         incident_title=incident_title,
         incident_description=incident_description,
@@ -330,9 +327,6 @@ def _render_investigation_status(report: IncidentReport) -> str:
             "- **Reinvestigation:** Requested during the bounded loop; no conclusive "
             "outcome was reached on the final pass."
         )
-    if report.approval is not None:
-        decision = "Approved" if report.approval.approved else "Rejected"
-        lines.append(f"- **Approval:** {decision} by {report.approval.reviewer}")
     return "\n".join(lines)
 
 

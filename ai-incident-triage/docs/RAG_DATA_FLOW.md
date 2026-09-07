@@ -268,9 +268,7 @@ anywhere in the output.
 
 ---
 
-## 8. Ingestion Approval Nodes — What They Actually Are
-
-Terminology disambiguation (important):
+## 8. Ingestion vs. Incident-Input Ingestion — Terminology Disambiguation
 
 * There is **no approval gate in front of RAG/FAISS ingestion**. RAG ingestion
   is an offline, developer-triggered script (`scripts/ingest_model_data.py`);
@@ -278,36 +276,15 @@ Terminology disambiguation (important):
 * The graph's `ingestion` node (`app/graph/nodes/ingestion.py`) normalises the
   raw alert payload into the domain `Incident` model — *incident input*
   ingestion, not vector-store ingestion.
-* The graph's `approval` node (`app/graph/nodes/approval.py`) is the
-  human-in-the-loop checkpoint **after RCA, before verification/notification**:
 
-```text
-Incident input → Ingestion(normalise) → Classification → Investigation
-      → Summary → RCA Report
-                     ↓
-              [Approval Node]   ← HITL sign-off gate
-                ↙         ↘
-         approved       rejected
-             ↓               ↓
-        verification    notification (rejection)
-```
-
-Why it exists / what it protects:
-
-* **What state it operates on:** reads the built `IncidentReport`
-  (`state["incident_report"]`), `classification.priority`, and confidence.
-* **Policy:** `_default_approve` requires sign-off when priority ∈ {P1, P2} or
-  classification confidence is below the default threshold, *unless*
-  `deps["auto_approve"]` is enabled (default in POC). A production policy
-  service would be injected via `deps["approval_service"]`.
-* **On approval:** an `ApprovalDecision(approved=True)` is recorded on state +
-  incident report; router (`router.route_after_approval`) continues to
-  `verification`.
-* **On rejection:** decision recorded, routed straight to `notification`
-  (the workflow ends without automated remediation/verification).
-* **Is it required?** It does not block or gate Log/K8s RAG in any way. For the
-  POC it auto-approves; it exists so the HITL seam for a production rollout is
-  already wired and tested rather than retro-fitted later. Keep it.
+**Update:** the graph previously had an `approval` node between RCA and
+verification (a human-sign-off checkpoint). It has been removed — under the
+POC's actual defaults (`auto_approve=True` everywhere it was ever invoked) it
+always approved, `deps["approval_service"]`/`app/rules/ownership.py` were
+never implemented to back it with a real policy, and `incident-triage-HLD.md`
+(the project's architecture doc) explicitly rejects a human-approval gate in
+several places (e.g. §16, "No Human-in-the-Loop for Initial Analysis"). The
+flow is now `RCA Report → verification → notification` directly.
 
 ---
 

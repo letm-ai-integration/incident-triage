@@ -2,7 +2,7 @@
 #
 # v2 pipeline: ingestion -> classification (category + severity) ->
 # investigation (parallel sub-agents) -> investigation_summary -> rca_report ->
-# approval -> verification -> notification.
+# verification -> notification.
 #
 # This is the single canonical graph-state shape. Every field is declared here;
 # nodes only ever return keys declared on this TypedDict. Where a concept has an
@@ -14,8 +14,7 @@ from typing import Optional, TypedDict
 
 from app.domain.enums.incident_type import IncidentType
 from app.domain.enums.priority import Priority
-from app.domain.enums.status import ApprovalStatus, IncidentStatus, NotificationStatus
-from app.domain.models.approval import ApprovalDecision
+from app.domain.enums.status import IncidentStatus, NotificationStatus
 from app.domain.models.classification import ClassificationResult
 from app.domain.models.evidence import Evidence
 from app.domain.models.hypothesis import Hypothesis
@@ -88,10 +87,6 @@ class IncidentState(TypedDict, total=False):
     retry_count: int
     current_step: str
     errors: list[str]
-
-    # 8. Approval
-    approval: ApprovalDecision
-    approval_status: ApprovalStatus
 
     # 9. Notification
     notification_status: NotificationStatus

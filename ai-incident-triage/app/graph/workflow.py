@@ -3,13 +3,13 @@
 # v2 flow:
 #   ingestion -> classification (category + severity)
 #     -> investigation (parallel sub-agents)
-#     -> investigation_summary -> rca_report -> approval
+#     -> investigation_summary -> rca_report
 #     -> verification (resolved -> notification; unresolved -> loop to investigation)
 #     -> notification
 #
-# The classification/approval/verification stages branch through the pure
-# routing functions in router.py. All node/edge registration goes through
-# builder.py's public API.
+# The classification/verification stages branch through the pure routing
+# functions in router.py. All node/edge registration goes through builder.py's
+# public API.
 from typing import Any
 
 from app.graph.builder import (
@@ -23,7 +23,6 @@ from app.graph.builder import (
 )
 from app.graph.events import RunEventBus
 from app.graph.nodes import (
-    approval_node,
     classification_node,
     ingestion_node,
     investigation_node,
@@ -33,7 +32,6 @@ from app.graph.nodes import (
     verification_node,
 )
 from app.graph.router import (
-    route_after_approval,
     route_after_classification,
     route_after_verification,
 )
@@ -50,7 +48,6 @@ def build_triage_graph():
     add_node(graph, "investigation", investigation_node)
     add_node(graph, "investigation_summary", investigation_summary_node)
     add_node(graph, "rca_report", rca_report_node)
-    add_node(graph, "approval", approval_node)
     add_node(graph, "verification", verification_node)
     add_node(graph, "notification", notification_node)
 
@@ -69,17 +66,7 @@ def build_triage_graph():
 
     add_edge(graph, "investigation", "investigation_summary")
     add_edge(graph, "investigation_summary", "rca_report")
-    add_edge(graph, "rca_report", "approval")
-
-    add_conditional_edge(
-        graph,
-        "approval",
-        route_after_approval,
-        {
-            "approved": "verification",
-            "rejected": "notification",
-        },
-    )
+    add_edge(graph, "rca_report", "verification")
 
     add_conditional_edge(
         graph,

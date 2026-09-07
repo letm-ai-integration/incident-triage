@@ -7,7 +7,7 @@ logic lives here.
 
 Usage:
 
-    python -m app.main data/incidents/database_timeout.json --auto-approve
+    python -m app.main data/incidents/database_timeout.json
 
 LLM-backed classification/RCA are opt-in via ``--use-llm`` and require a
 provider API key in ``.env``; without it the deterministic rule-based
@@ -58,10 +58,6 @@ def _load_incident(path: Path) -> dict[str, Any]:
 @app.command()
 def triage(
     incident_file: Path = typer.Argument(..., help="Path to an incident JSON file."),  # noqa: B008
-    auto_approve: bool = typer.Option(
-        True, "--auto-approve/--require-approval",
-        help="Auto-approve P1/P2 or low-confidence incidents without human sign-off.",
-    ),
     use_llm: bool = typer.Option(
         False, "--use-llm",
         help="Use LLM-backed classification/RCA agents (requires a provider API key).",
@@ -71,7 +67,6 @@ def triage(
     raw_input = _load_incident(incident_file)
 
     deps: dict[str, Any] = {
-        "auto_approve": auto_approve,
         "investigation_service": investigation_service,
         "notification_service": notification_service,
     }
@@ -98,7 +93,6 @@ def triage(
 
     incident = final_state.get("incident")
     classification = final_state.get("classification")
-    approval = final_state.get("approval")
 
     typer.echo("Triage Result")
     typer.echo("=" * 60)
@@ -112,10 +106,6 @@ def triage(
             f"{classification.priority.value} "
             f"(confidence {classification.confidence:.0%})"
         )
-    if approval is not None:
-        typer.echo(f"Approval      : {'approved' if approval.approved else 'rejected'}"
-                   f" by {approval.reviewer}")
-
     resolved = final_state.get("is_resolved")
     status = final_state.get("investigation_status")
     typer.echo(f"Resolution    : {'resolved' if resolved else 'unresolved'} ({status})")

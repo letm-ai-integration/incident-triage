@@ -31,7 +31,7 @@ see `README.md` and `incident-triage-HLD.md`.
 - **Why a subgraph instead of top-level nodes**: the parent triage graph keeps
   a single readable `investigation` node
   (`ingestion → classification → investigation ⇄ verification → summary →
-  rca_report → approval → notification`), while the subagent topology,
+  rca_report → notification`), while the subagent topology,
   parallelism, and aggregation live inside the phase subgraph where they can
   still be executed, tested, and rendered as a first-class LangGraph
   definition (not hand-drawn).
@@ -51,7 +51,9 @@ see `README.md` and `incident-triage-HLD.md`.
 
 - **The graph was already complete** (`app/graph/workflow.py`: ingestion →
   classification → investigation ⇄ verification → summary → rca_report →
-  approval → notification, with conditional routing via `app/graph/router.py`).
+  notification, with conditional routing via `app/graph/router.py`). Note:
+  the graph originally had an `approval` node between `rca_report` and
+  `verification`; it was later removed (see `docs/RAG_DATA_FLOW.md` §8).
   No structural graph changes were needed; integration focused on wiring the
   real agent implementations into the `deps` injection points the nodes
   already expose.

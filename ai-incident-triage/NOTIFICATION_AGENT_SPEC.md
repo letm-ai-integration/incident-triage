@@ -50,7 +50,7 @@ do not introduce a new architectural style for this one agent.
 2. **Read `app/agents/investigation/orchestrator.py` and
    `app/graph/nodes/notification.py`** (if it already has any content) to
    confirm what actually reaches the notification stage in the pipeline —
-   per the node order (`rca_report → approval → verification →
+   per the node order (`rca_report → verification →
    notification`), confirm whether notification receives the RCA report
    directly, or a wrapped/combined state object that includes it.
    Regardless of what else is available, **the RCA report is the primary

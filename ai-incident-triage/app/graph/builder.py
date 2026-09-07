@@ -14,7 +14,7 @@
 # import langgraph internals themselves.
 #
 # v2 nodes: ingestion, classification, investigation, investigation_summary,
-# rca_report, approval, verification, notification.
+# rca_report, verification, notification.
 from __future__ import annotations
 
 import functools

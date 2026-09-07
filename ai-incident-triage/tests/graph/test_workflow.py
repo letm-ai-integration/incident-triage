@@ -16,7 +16,6 @@ from app.domain.enums.incident_type import IncidentType
 from app.domain.enums.priority import Priority
 from app.domain.enums.status import IncidentStatus, NotificationStatus
 from app.graph.router import (
-    route_after_approval,
     route_after_classification,
     route_after_verification,
 )
@@ -30,7 +29,6 @@ RECURSION_LIMIT = 50
 
 def _deps(**extra) -> dict:
     deps = {
-        "auto_approve": True,
         "investigation_service": investigation_service,
         "notification_service": notification_service,
     }
@@ -59,14 +57,14 @@ def test_graph_compiles_with_expected_nodes_and_edges():
     nodes = set(graph.get_graph().nodes)
     assert {
         "ingestion", "classification", "investigation",
-        "investigation_summary", "rca_report", "approval",
+        "investigation_summary", "rca_report",
         "verification", "notification",
     } <= nodes
 
 
 def test_build_triage_graph_registers_all_nodes_before_compilation():
     graph = build_triage_graph()
-    assert len(graph.nodes) == 8  # builder-tracked node names
+    assert len(graph.nodes) == 7  # builder-tracked node names
 
 
 # ---------------------------------------------------------------------------
@@ -91,10 +89,9 @@ def test_end_to_end_database_timeout_identifies_rca_without_resolving():
     sources = {e.source for e in result["evidence"]}
     assert sources == {"log_analysis", "runbook", "kubernetes"}
 
-    # summary -> rca -> approval -> verification -> notification propagation
+    # summary -> rca -> verification -> notification propagation
     assert result["investigation_summary"]["evidence_count"] >= 3
     assert result["root_cause"].primary_cause.description
-    assert result["approval"].approved is True
     # high confidence + expected action is NOT resolution (Phase 4 gate)
     assert result["verification_result"].is_resolved is False
     assert result["is_resolved"] is False
@@ -142,17 +139,6 @@ def test_route_after_classification_auto_resolve_for_p4():
         agrees_with_rule=True,
     )
     assert route_after_classification({"classification": result}) == "auto_resolve"
-
-
-def test_route_after_approval_rejected_on_disapproval():
-    from datetime import UTC, datetime
-
-    from app.domain.models.approval import ApprovalDecision
-    decision = ApprovalDecision(
-        approved=False, reviewer="x", comments="",
-        timestamp=datetime.now(UTC),
-    )
-    assert route_after_approval({"approval": decision}) == "rejected"
 
 
 def test_route_after_verification_reinvestigates_then_completes():
