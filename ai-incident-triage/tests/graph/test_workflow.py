@@ -57,14 +57,14 @@ def test_graph_compiles_with_expected_nodes_and_edges():
     nodes = set(graph.get_graph().nodes)
     assert {
         "ingestion", "classification", "investigation",
-        "investigation_summary", "rca_report",
+        "rca_report",
         "verification", "notification",
     } <= nodes
 
 
 def test_build_triage_graph_registers_all_nodes_before_compilation():
     graph = build_triage_graph()
-    assert len(graph.nodes) == 7  # builder-tracked node names
+    assert len(graph.nodes) == 6  # builder-tracked node names
 
 
 # ---------------------------------------------------------------------------
@@ -89,8 +89,8 @@ def test_end_to_end_database_timeout_identifies_rca_without_resolving():
     sources = {e.source for e in result["evidence"]}
     assert sources == {"log_analysis", "runbook", "kubernetes"}
 
-    # summary -> rca -> verification -> notification propagation
-    assert result["investigation_summary"]["evidence_count"] >= 3
+    # evidence -> rca -> verification -> notification propagation
+    assert len(result["evidence"]) >= 3
     assert result["root_cause"].primary_cause.description
     # high confidence + expected action is NOT resolution (Phase 4 gate)
     assert result["verification_result"].is_resolved is False

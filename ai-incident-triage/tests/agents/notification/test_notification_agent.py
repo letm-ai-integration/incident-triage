@@ -222,25 +222,23 @@ def test_template_fallback_uses_canonical_structure_and_honest_remediation():
     email = _draft_email_template(report)
 
     assert "(remediation pending)" in email.subject
-    # Full Phase 5 canonical template: all nine sections, in order.
-    headings = [
-        "Incident Summary",
-        "Incident Overview",
-        "Environment",
-        "Impacted Services",
-        "Impact Assessment",
-        "Investigation Findings",
-        "Root Cause Analysis",
-        "Recommended Remediation",
-        "Investigation Status",
+    # Full canonical template: header band + all 8 body sections, in order.
+    sections = [
+        "1 · Incident Overview",
+        "2 · Environment",
+        "3 · Impacted Services",
+        "4 · Impact Assessment",
+        "5 · Investigation Findings",
+        "6 · Root Cause Analysis",
+        "7 · Recommended Remediation",
+        "8 · Investigation Status",
     ]
-    positions = [email.body.index(h) for h in headings]
-    assert positions == sorted(positions), [(h, p) for h, p in zip(headings, positions)]
+    positions = [email.body.index(h) for h in sections]
+    assert positions == sorted(positions), [(h, p) for h, p in zip(sections, positions)]
     # Environment and priority must be visible and correctly populated, not
     # inferred or invented.
-    assert "<h3>Environment</h3><p><b>Environment:</b> staging</p>" in email.body
-    assert "<td>P1</td>" in email.body  # the incident's actual priority
-    assert "Severity / Role" in email.body
+    assert "Environment: Staging" in email.body  # from the incident's own value
+    assert ">P1</span>" in email.body  # the incident's actual priority badge
     assert "Runbook Status:" in email.body
     assert "Remediation:" in email.body
     assert "Contributing Factors" in email.body

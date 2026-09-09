@@ -1,8 +1,8 @@
 # Shared LangGraph state.
 #
 # v2 pipeline: ingestion -> classification (category + severity) ->
-# investigation (parallel sub-agents) -> investigation_summary -> rca_report ->
-# verification -> notification.
+# investigation (parallel sub-agents; evidence/hypotheses land in shared state)
+# -> rca_report -> verification -> notification.
 #
 # This is the single canonical graph-state shape. Every field is declared here;
 # nodes only ever return keys declared on this TypedDict. Where a concept has an
@@ -70,10 +70,7 @@ class IncidentState(TypedDict, total=False):
     runbook_name: str | None
     runbook_solution: str | None
 
-    # 4. Investigation Summary
-    investigation_summary: dict
-
-    # 5. RCA & Report
+    # 4. RCA & Report
     root_cause: RootCauseAnalysis
     rca_confidence: float
     incident_report: IncidentReport

@@ -262,7 +262,7 @@ def test_default_rca_report_runs_claim_validation():
         "pods CrashLoopBackOff after the deploy", h_id="hyp-1",
         supporting_evidence=["ev-log-1"],
     )
-    state = {"incident": incident, "evidence": evidence, "hypotheses": [h], "investigation_summary": {}}
+    state = {"incident": incident, "evidence": evidence, "hypotheses": [h]}
     update = _default_rca_report(state, {})
 
     assert update["claim_validation"]

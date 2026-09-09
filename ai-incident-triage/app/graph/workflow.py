@@ -2,8 +2,8 @@
 #
 # v2 flow:
 #   ingestion -> classification (category + severity)
-#     -> investigation (parallel sub-agents)
-#     -> investigation_summary -> rca_report
+#     -> investigation (parallel sub-agents; evidence/hypotheses land in shared state)
+#     -> rca_report
 #     -> verification (resolved -> notification; unresolved -> loop to investigation)
 #     -> notification
 #
@@ -26,7 +26,6 @@ from app.graph.nodes import (
     classification_node,
     ingestion_node,
     investigation_node,
-    investigation_summary_node,
     notification_node,
     rca_report_node,
     verification_node,
@@ -46,7 +45,6 @@ def build_triage_graph():
     add_node(graph, "ingestion", ingestion_node)
     add_node(graph, "classification", classification_node)
     add_node(graph, "investigation", investigation_node)
-    add_node(graph, "investigation_summary", investigation_summary_node)
     add_node(graph, "rca_report", rca_report_node)
     add_node(graph, "verification", verification_node)
     add_node(graph, "notification", notification_node)
@@ -64,8 +62,7 @@ def build_triage_graph():
         },
     )
 
-    add_edge(graph, "investigation", "investigation_summary")
-    add_edge(graph, "investigation_summary", "rca_report")
+    add_edge(graph, "investigation", "rca_report")
     add_edge(graph, "rca_report", "verification")
 
     add_conditional_edge(
@@ -116,6 +113,10 @@ def stream_triage_graph(
         run_id = str(uuid.uuid4())
 
     bus = RunEventBus(run_id)
+
+    # Make run_id available to services like notification_service (which renders
+    # it into the email footer) without callers having to thread it by hand.
+    deps = {**(deps or {}), "run_id": run_id}
 
     from app.graph.tracing import TracingCallbackHandler
 

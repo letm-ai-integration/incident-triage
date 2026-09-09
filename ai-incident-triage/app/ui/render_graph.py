@@ -16,9 +16,10 @@ import html
 from typing import Any
 
 from app.ui import theme
+from app.ui.format_label import humanize_node_name
 
 # Node box geometry.
-_NODE_W = 160
+_NODE_W = 144  # 90% of the original 160px -- tighter, less dominant boxes
 _NODE_H = 48
 _PILL_W = 118
 _PILL_H = 20
@@ -29,6 +30,19 @@ _ROW_GAP = 38
 _LANE_SLOT = 22
 _RIGHT_LANE_BASE = 560
 _LEFT_LANE_BASE = _CENTER_X - _NODE_W / 2 - 56
+
+# SVG max on-screen width: the canvas used to scale its height with the column
+# width (width=100%), which made it enormous once it became full-width. Capping
+# the wrapper width keeps the drawing near 1:1 scale; the graph container
+# scrolls vertically (see streamlit_app) and the auto-scroll helper pans it to
+# the active node until the user takes over by scrolling themselves.
+_MAX_WIDTH_PX = 700
+
+# Edges drawn by topology introspection but hidden in the UI: the
+# classification -> notification "auto_resolve" branch has no HITL/approval
+# step behind it any more, and the lane it drew across the canvas was pure
+# visual noise. The backend route is untouched -- only the drawing skips it.
+_HIDDEN_EDGES: set[tuple[str, str]] = {("classification", "notification")}
 
 
 def _status(value: Any) -> str:
@@ -51,11 +65,12 @@ def _node_svg(name: str, cx: float, cy: float, status: str) -> str:
     pulse = ' class="it-running"' if status == "running" else ""
     glyph = "⟳ " if status == "running" else ""
     return (
-        f'<g{pulse}><rect x="{x:.0f}" y="{y:.0f}" width="{_NODE_W}" height="{_NODE_H}" rx="8" '
+        f'<g id="node-{_esc(name)}"{pulse}>'
+        f'<rect x="{x:.0f}" y="{y:.0f}" width="{_NODE_W}" height="{_NODE_H}" rx="8" '
         f'fill="{theme.SURFACE}" stroke="{color}" stroke-width="2"/>'
         f'<circle cx="{x + 12:.0f}" cy="{cy:.0f}" r="4" fill="{color}"/>'
         f'<text x="{x + 24:.0f}" y="{cy - 3:.0f}" fill="{theme.TEXT}" font-size="13" '
-        f'font-family="ui-monospace,monospace" font-weight="600">{_esc(name)}</text>'
+        f'font-family="ui-monospace,monospace" font-weight="600">{_esc(humanize_node_name(name))}</text>'
         f'<text x="{x + 24:.0f}" y="{cy + 13:.0f}" fill="{theme.MUTED}" font-size="10">'
         f'{_esc(glyph + theme.status_label(status))}</text></g>'
     )
@@ -66,11 +81,12 @@ def _ellipse_svg(name: str, cx: float, cy: float, status: str) -> str:
     pulse = ' class="it-running"' if status == "running" else ""
     glyph = "⟳ " if status == "running" else ""
     return (
-        f'<g{pulse}><ellipse cx="{cx:.0f}" cy="{cy:.0f}" rx="38" ry="17" fill="{theme.SURFACE}" '
+        f'<g id="node-{_esc(name.lower())}"{pulse}>'
+        f'<ellipse cx="{cx:.0f}" cy="{cy:.0f}" rx="38" ry="17" fill="{theme.SURFACE}" '
         f'stroke="{color}" stroke-width="2"/>'
         f'<text x="{cx:.0f}" y="{cy - 1:.0f}" fill="{theme.TEXT}" font-size="11" '
         f'text-anchor="middle" font-family="ui-monospace,monospace" font-weight="700">'
-        f'{_esc(name)}</text>'
+        f'{_esc(humanize_node_name(name))}</text>'
         f'<text x="{cx:.0f}" y="{cy + 12:.0f}" fill="{color}" font-size="9" '
         f'text-anchor="middle" font-family="ui-monospace,monospace">'
         f'{_esc(glyph + theme.status_label(status))}</text></g>'
@@ -88,7 +104,7 @@ def _pill_svg(name: str, cx: float, cy: float, status: str) -> str:
         f'fill="{theme.SURFACE_ALT}" stroke="{color}" stroke-width="1.5"/>'
         f'<circle cx="{x + 10:.0f}" cy="{cy:.0f}" r="3" fill="{color}"/>'
         f'<text x="{x + 18:.0f}" y="{cy + 4:.0f}" fill="{theme.TEXT}" font-size="10" '
-        f'font-family="ui-monospace,monospace">{_esc(glyph + name)}</text></g>'
+        f'font-family="ui-monospace,monospace">{_esc(glyph + humanize_node_name(name))}</text></g>'
     )
 
 
@@ -102,7 +118,7 @@ def _edge_path(points: list[tuple[float, float]], color: str, dashed: bool,
         label_svg = (
             f'<text x="{mx + label_dx:.0f}" y="{my - 6:.0f}" fill="{theme.MUTED}" '
             f'font-size="9" text-anchor="middle" '
-            f'font-family="ui-monospace,monospace">{_esc(label)}</text>'
+            f'font-family="ui-monospace,monospace">{_esc(humanize_node_name(label))}</text>'
         )
     return (
         f'<polyline points="{pts}" fill="none" stroke="{color}" stroke-width="2"{dash} '
@@ -149,8 +165,8 @@ def _layout(topology: dict[str, Any]) -> tuple[dict[str, int], dict[str, float],
     # real entry point: starting at START we reach investigation via
     # classification, so verification -> investigation is flagged while
     # investigation is still on the recursion stack. Starting the DFS at an
-    # arbitrary set-ordered node (e.g. rca_report) instead flags a *different*
-    # edge of the same cycle (investigation_summary -> rca_report), which then
+    # arbitrary set-ordered node (e.g. notification) instead flags a *different*
+    # edge of the same cycle (rca_report -> verification), which then
     # gets excluded from the level computation below -- rca_report pops from the
     # Kahn queue at level 0 and the whole spine is drawn out of order.
     color: dict[str, int] = {}
@@ -246,6 +262,21 @@ def render_graph(
     if ran:
         ran.add("END")
 
+    # --- Auto-scroll focus marker ----------------------------------------
+    # The graph container is user-scrollable; a small helper script in the app
+    # pans it to this node on every stream event -- but only until the user
+    # scrolls themselves (the helper latches "off" in sessionStorage on the
+    # first wheel/touch/press, per run).
+    focus_name = ""
+    for name in node_names:
+        if name in running:
+            focus_name = name
+            break
+    if not focus_name:
+        for name, event in node_states.items():
+            if _status(event) in ("success", "error") and name in y_cent:
+                focus_name = name
+
     # Assign lane slots to non-adjacent (branch / loop) edges so they route
     # around the central spine without overlapping each other.
     right_slot = left_slot = 0
@@ -278,6 +309,8 @@ def render_graph(
         s, t = e["source"], e["target"]
         if s not in y_cent or t not in y_cent:
             continue
+        if (s, t) in _HIDDEN_EDGES:
+            continue  # auto-resolve branch: drawn route omitted (see _HIDDEN_EDGES)
         if t in running:
             color = theme.EDGE_ACTIVE
         elif t in ran or s == "START":
@@ -328,7 +361,13 @@ def render_graph(
     parts.append(_ellipse_svg("START", _CENTER_X, y_cent["START"], start_status))
     parts.append(_ellipse_svg("END", _CENTER_X, y_cent["END"], end_status))
     svg = "".join(parts) + "</svg>"
-    return svg
+    # Horizontal padding + capped width so the canvas stays near 1:1 scale and
+    # does not butt against the page edges. data-focus-node feeds the
+    # auto-scroll helper; the user scrolling the container disables it.
+    return (
+        f'<div id="it-graph-canvas" data-focus-node="{_esc(focus_name)}" '
+        f'style="max-width:{_MAX_WIDTH_PX}px;margin:0 auto;padding:0 14px;">{svg}</div>'
+    )
 
 
 def canvas_height(topology: dict[str, Any]) -> float:

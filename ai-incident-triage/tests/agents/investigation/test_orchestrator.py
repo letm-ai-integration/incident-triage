@@ -163,8 +163,7 @@ def test_downstream_rca_consumes_orchestrated_evidence():
     assert orchestrated_ids == report_evidence_ids
     # RCA primary cause is derived from the orchestrator's hypotheses, not invented
     assert result["root_cause"].primary_cause.description
-    summary_sources = set(result["investigation_summary"]["sources"])
-    assert summary_sources == {"log_analysis", "kubernetes", "runbook"}
+    assert {e.source for e in result["evidence"]} == {"log_analysis", "kubernetes", "runbook"}
 
 
 # ---------------------------------------------------------------------------
@@ -180,7 +179,7 @@ def test_end_to_end_via_default_orchestrator_node():
     assert {e.source for e in result["evidence"]} == {
         "log_analysis", "kubernetes", "runbook"
     }
-    assert result["investigation_summary"]["evidence_count"] >= 3
+    assert len(result["evidence"]) >= 3
     # Phase 4: investigate-only gate -- no recovery telemetry supplied by the
     # mock incident, so it reaches notification unresolved.
     assert result["is_resolved"] is False
