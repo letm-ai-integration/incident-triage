@@ -13,8 +13,8 @@
 # ``START`` and ``END`` are re-exported here so workflow modules never need to
 # import langgraph internals themselves.
 #
-# v2 nodes: ingestion, classification, investigation, investigation_summary,
-# rca_report, verification, notification.
+# v2 nodes: ingestion, classification, investigation, rca_report,
+# verification, notification.
 from __future__ import annotations
 
 import functools

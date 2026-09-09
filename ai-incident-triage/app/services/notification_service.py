@@ -37,8 +37,13 @@ def notification_service(state: dict[str, Any], deps: dict[str, Any]) -> dict[st
         }
 
     model = deps.get("notification_model")
-    logger.info("[notification_service] running notification agent for incident=%s", report.incident_id)
-    result = run_notification_agent(report, model=model)
+    run_id = deps.get("run_id") or None
+    logger.info(
+        "[notification_service] running notification agent for incident=%s run_id=%s",
+        report.incident_id,
+        run_id or "n/a",
+    )
+    result = run_notification_agent(report, model=model, run_id=run_id)
     update: dict[str, Any] = {
         "notification_status": (
             NotificationStatus.NOTIFIED if result.success else NotificationStatus.FAILED

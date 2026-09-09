@@ -14,6 +14,7 @@ from typing import Any
 
 from app.graph.events import NodeEvent
 from app.ui import theme
+from app.ui.format_label import humanize_node_name
 
 
 def _esc(text: Any) -> str:
@@ -81,7 +82,17 @@ def _row(event: NodeEvent) -> str:
     if event.agent_trace:
         lines.append("<details><summary>Agent trace "
                      f"({len(event.agent_trace)} call(s))</summary>")
-        lines.append(f"<pre>{_esc(_pretty(event.agent_trace))}</pre></details>")
+        # Humanize the sub-agent/call names inside the trace dump so raw
+        # internal identifiers never surface in the UI (Phase 4).
+        pretty_trace: list[Any] = []
+        for call in event.agent_trace:
+            if isinstance(call, dict) and call.get("name"):
+                pretty_trace.append(
+                    {**call, "name": humanize_node_name(call["name"])}
+                )
+            else:
+                pretty_trace.append(call)
+        lines.append(f"<pre>{_esc(_pretty(pretty_trace))}</pre></details>")
     if event.error:
         lines.append(f'<div style="color:{theme.ACCENT}">Error: {_esc(event.error)}</div>')
     expander = "".join(lines)
@@ -95,7 +106,7 @@ def _row(event: NodeEvent) -> str:
         f'background:{theme.SURFACE};border-radius:6px;">'
         f'<div style="display:flex;justify-content:space-between;align-items:center;">'
         f'<span><span class="it-status-pill" style="background:{color}">{label}</span> '
-        f'&nbsp;<b style="color:{theme.TEXT}">{_esc(event.node_name)}</b> '
+        f'&nbsp;<b style="color:{theme.TEXT}">{_esc(humanize_node_name(event.node_name))}</b> '
         f'<span class="it-muted">({len(event.agent_trace)} trace)</span></span>'
         f'<span class="it-duration">{duration}</span></div>'
         f'<div class="it-muted">{preview}</div>{expander}</div>'

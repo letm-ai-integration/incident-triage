@@ -4,8 +4,7 @@
 # ``deps["investigation_service"]`` (app/services/investigation_service.py),
 # which executes app/agents/investigation/subgraph.py: three parallel
 # sub-agents (log_analysis, kubernetes, runbook) aggregated into structured
-# evidence/hypotheses written back into shared IncidentState. Findings are
-# consolidated downstream by investigation_summary.
+# evidence/hypotheses written back into shared IncidentState.
 from __future__ import annotations
 
 from typing import Optional

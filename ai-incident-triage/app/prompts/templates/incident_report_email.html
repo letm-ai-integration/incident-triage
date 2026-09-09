@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Incident Report — {{ incident_id }}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f0f2f5;font-family:Arial,Helvetica,sans-serif;color:#23262b;font-size:14px;line-height:1.55;">
+  <!--
+    Table-based incident report / notification email.
+    Table layout with inline CSS only (Outlook-safe). All dynamic data is
+    HTML-escaped by the renderer (autoescape) before it reaches this file.
+    Sections and order are a hard contract -- see render_html_email_report().
+  -->
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f0f2f5;">
+    <tr>
+      <td align="center" style="padding:20px 0;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:740px;">
+
+          <!-- ============ HEADER BAND ============ -->
+          <tr>
+            <td style="background-color:#ff4b4b;padding:22px 28px;border-radius:4px 4px 0 0;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="color:#ffffff;font-size:22px;font-weight:bold;">Incident {{ incident_id }}</td>
+                  <td align="right" style="padding-top:2px;">
+                    <span style="display:inline-block;padding:3px 14px;border-radius:12px;background-color:{{ severity_color }};color:#ffffff;font-size:13px;font-weight:bold;letter-spacing:0.4px;">{{ severity_label }}</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td colspan="2" style="padding-top:10px;color:#ffe0dd;font-size:12px;">Generated {{ generated_at }}</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <tr><td style="height:4px;"></td></tr>
+
+          <!-- ============ 1. INCIDENT OVERVIEW ============ -->
+          <tr>
+            <td style="background-color:#f6f8fa;padding:16px 28px;border:1px solid #e2e5ea;">
+              <div style="font-size:16px;font-weight:bold;color:#ff4b4b;">1 · Incident Overview</div>
+              <div style="padding:10px 0 0 0;color:#24292f;">
+                {% for paragraph in overview_paragraphs %}<p style="margin:0 0 8px 0;">{{ paragraph }}</p>{% endfor %}
+              </div>
+            </td>
+          </tr>
+
+          <tr><td style="height:10px;"></td></tr>
+
+          <!-- ============ 2. ENVIRONMENT ============ -->
+          <tr>
+            <td style="background-color:#f6f8fa;padding:16px 28px;border:1px solid #e2e5ea;">
+              <div style="font-size:16px;font-weight:bold;color:#ff4b4b;">2 · Environment</div>
+              <div style="padding:10px 0 0 0;color:#24292f;">
+                <table role="presentation" cellpadding="4" cellspacing="0" border="0" style="background-color:#23262b;border-radius:4px;">
+                  <tr>
+                    <td style="color:#ffffff;font-size:12px;font-weight:bold;padding:4px 14px;">Environment: {{ environment_label }}</td>
+                  </tr>
+                </table>
+              </div>
+            </td>
+          </tr>
+
+          <tr><td style="height:10px;"></td></tr>
+
+          <!-- ============ 3. IMPACTED SERVICES ============ -->
+          <tr>
+            <td style="background-color:#f6f8fa;padding:16px 28px;border:1px solid #e2e5ea;">
+              <div style="font-size:16px;font-weight:bold;color:#ff4b4b;">3 · Impacted Services</div>
+              <div style="padding:10px 0 0 0;">
+                <table role="presentation" width="100%" cellpadding="8" cellspacing="0" border="0" style="border-collapse:collapse;border:1px solid #c8cdd3;">
+                  <thead>
+                    <tr style="background-color:#e6e9ee;">
+                      <th style="text-align:left;color:#3a3f45;font-size:12px;font-weight:bold;border:1px solid #c8cdd3;">Service</th>
+                      <th style="text-align:left;color:#3a3f45;font-size:12px;font-weight:bold;border:1px solid #c8cdd3;">Severity / Role</th>
+                      <th style="text-align:left;color:#3a3f45;font-size:12px;font-weight:bold;border:1px solid #c8cdd3;">Impact</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% if impacted_services_empty %}
+                    <tr>
+                      <td colspan="3" style="padding:8px 12px;color:#24292f;border:1px solid #c8cdd3;">No impacted services could be identified from available evidence.</td>
+                    </tr>
+                    {% else %}
+                    {% for row in impacted_services %}
+                    <tr>
+                      <td style="padding:6px 12px;color:#24292f;border:1px solid #c8cdd3;">{{ row.service }}</td>
+                      <td style="padding:6px 12px;color:#24292f;border:1px solid #c8cdd3;">{{ row.severity }}</td>
+                      <td style="padding:6px 12px;color:#24292f;border:1px solid #c8cdd3;">{{ row.impact }}</td>
+                    </tr>
+                    {% endfor %}
+                    {% endif %}
+                  </tbody>
+                </table>
+              </div>
+            </td>
+          </tr>
+
+          <tr><td style="height:10px;"></td></tr>
+<!-- ============ 4. IMPACT ASSESSMENT ============ -->
+          <tr>
+            <td style="background-color:#f6f8fa;padding:16px 28px;border:1px solid #e2e5ea;">
+              <div style="font-size:16px;font-weight:bold;color:#ff4b4b;">4 · Impact Assessment</div>
+              <div style="padding:10px 0 0 0;color:#24292f;">
+                {% for paragraph in impact_assessment_paragraphs %}<p style="margin:0 0 8px 0;">{{ paragraph }}</p>{% endfor %}
+                {% if impact_assessment_items %}
+                <ul style="margin:6px 0 0 18px;color:#24292f;">
+                  {% for item in impact_assessment_items %}<li style="margin:0 0 4px 0;">{{ item }}</li>{% endfor %}
+                </ul>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+
+          <tr><td style="height:10px;"></td></tr>
+
+          <!-- ============ 5. INVESTIGATION FINDINGS ============ -->
+          <tr>
+            <td style="background-color:#f6f8fa;padding:16px 28px;border:1px solid #e2e5ea;">
+              <div style="font-size:16px;font-weight:bold;color:#ff4b4b;">5 · Investigation Findings</div>
+              <div style="padding:10px 0 0 0;">
+                <ul style="margin:6px 0 0 18px;color:#24292f;">
+                  {% if findings_empty %}
+                  <li style="margin:0 0 4px 0;">No findings could be established from available evidence.</li>
+                  {% else %}
+                  {% for finding in findings %}<li style="margin:0 0 4px 0;">{{ finding }}</li>{% endfor %}
+                  {% endif %}
+                </ul>
+              </div>
+            </td>
+          </tr>
+
+          <tr><td style="height:10px;"></td></tr>
+
+          <!-- ============ 6. ROOT CAUSE ANALYSIS ============ -->
+          <tr>
+            <td style="background-color:#f6f8fa;padding:16px 28px;border:1px solid #e2e5ea;">
+              <div style="font-size:16px;font-weight:bold;color:#ff4b4b;">6 · Root Cause Analysis</div>
+              <div style="padding:10px 0 0 0;">
+                <span style="display:inline-block;padding:3px 14px;border-radius:12px;background-color:{{ root_cause_color }};color:#ffffff;font-size:12px;font-weight:bold;">{{ root_cause_state }}</span>
+              </div>
+              <div style="padding:8px 0 0 0;color:#24292f;">
+                <p style="margin:0 0 8px 0;">Primary cause: {{ root_cause_explanation }}</p>
+                <p style="margin:0 0 4px 0;font-weight:bold;color:#24292f;">Contributing Factors:</p>
+                {% if contributing_factors %}
+                <ul style="margin:4px 0 0 18px;color:#24292f;">
+                  {% for factor in contributing_factors %}<li style="margin:0 0 4px 0;">{{ factor }}</li>{% endfor %}
+                </ul>
+                {% else %}
+                <p style="margin:4px 0 0 0;color:#24292f;">No contributing factors identified.</p>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+
+          <tr><td style="height:10px;"></td></tr>
+<!-- ============ 7. RECOMMENDED REMEDIATION ============ -->
+          <tr>
+            <td style="background-color:#f6f8fa;padding:16px 28px;border:1px solid #e2e5ea;">
+              <div style="font-size:16px;font-weight:bold;color:#ff4b4b;">7 · Recommended Remediation</div>
+              <div style="padding:10px 0 0 0;color:#24292f;">
+                <p style="margin:0 0 6px 0;"><b>Runbook Status:</b> {{ runbook_status }}</p>
+                {% if no_runbook %}
+                <blockquote style="margin:4px 0 0 18px;color:#24292f;border-left:4px solid #ffb4b4;padding:6px 12px;background-color:#fdf0f0;">
+                  <b>Runbook remediation unavailable:</b> No applicable runbook or validated remediation procedure was found.
+                  The investigation has identified the observed symptoms and available evidence, but a validated remediation
+                  path is not available. <b>On-call engineering action is required to determine, apply, and validate the appropriate fix.</b>
+                </blockquote>
+                {% else %}
+                <ol style="margin:4px 0 0 18px;color:#24292f;">
+                  {% for step in remediation_steps %}<li style="margin:0 0 4px 0;">{{ step }}</li>{% endfor %}
+                </ol>
+                {% endif %}
+                {% if remediation_actions %}
+                <p style="margin:8px 0 4px 0;font-weight:bold;color:#24292f;">Recommended next actions (analysis only, not yet executed):</p>
+                <ul style="margin:4px 0 0 18px;color:#24292f;">
+                  {% for action in remediation_actions %}<li style="margin:0 0 4px 0;">{{ action }}</li>{% endfor %}
+                </ul>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+
+          <tr><td style="height:10px;"></td></tr>
+
+          <!-- ============ 8. INVESTIGATION STATUS ============ -->
+          <tr>
+            <td style="background-color:#f6f8fa;padding:16px 28px;border:1px solid #e2e5ea;">
+              <div style="font-size:16px;font-weight:bold;color:#ff4b4b;">8 · Investigation Status</div>
+              <div style="padding:10px 0 0 0;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                  <tr>
+                    <td style="padding:4px 0;color:#24292f;"><b>Investigation:</b></td>
+                    <td align="right" style="padding:4px 0;"><span style="display:inline-block;padding:2px 12px;border-radius:12px;background-color:{{ investigation_color }};color:#ffffff;font-size:12px;font-weight:bold;">{{ investigation_label }}</span></td>
+                  </tr>
+                  <tr>
+                    <td style="padding:4px 0;color:#24292f;"><b>Root-Cause Analysis:</b></td>
+                    <td align="right" style="padding:4px 0;"><span style="display:inline-block;padding:2px 12px;border-radius:12px;background-color:{{ rca_color }};color:#ffffff;font-size:12px;font-weight:bold;">{{ rca_state }}</span></td>
+                  </tr>
+                  <tr>
+                    <td style="padding:4px 0;color:#24292f;"><b>Remediation:</b></td>
+                    <td align="right" style="padding:4px 0;"><span style="display:inline-block;padding:2px 12px;border-radius:12px;background-color:{{ remediation_state_color }};color:#ffffff;font-size:12px;font-weight:bold;">{{ remediation_state }}</span></td>
+                  </tr>
+                </table>
+                <p style="margin:10px 0 0 0;font-style:italic;color:#6b7280;font-size:12px;">{{ disclaimer }}</p>
+              </div>
+            </td>
+          </tr>
+
+          <tr><td style="height:12px;"></td></tr>
+
+          <!-- ============ FOOTER BAND ============ -->
+          <tr>
+            <td style="background-color:#e8eaef;padding:14px 28px;border-radius:0 0 4px 4px;color:#6b7280;font-size:11px;line-height:1.5;">
+              Run ID: {{ run_id }} &nbsp;·&nbsp; This is an automated investigation report generated by the incident-triage pipeline.
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

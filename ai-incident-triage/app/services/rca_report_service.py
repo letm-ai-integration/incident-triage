@@ -330,6 +330,14 @@ def _render_investigation_status(report: IncidentReport) -> str:
     return "\n".join(lines)
 
 
+def _evidence_summary(evidence: list) -> str:
+    """One-line deterministic summary of the collected evidence."""
+    if not evidence:
+        return "No evidence item(s) collected"
+    sources = sorted({item.source for item in evidence})
+    return f"{len(evidence)} evidence item(s) collected from {sources}"
+
+
 def rca_report_service(state: dict[str, Any], deps: dict[str, Any]) -> dict[str, Any]:
     """Graph-node adapter for ``deps["rca_report_service"]``.
 
@@ -341,10 +349,9 @@ def rca_report_service(state: dict[str, Any], deps: dict[str, Any]) -> dict[str,
     classification: ClassificationResult = state["classification"]
     evidence_items = state.get("evidence", [])
     hypotheses = state.get("hypotheses", [])
-    summary = state.get("investigation_summary") or {}
     evidence = EvidenceCollection(
         items=evidence_items,
-        summary=summary.get("summary", f"{len(evidence_items)} evidence item(s) collected"),
+        summary=_evidence_summary(evidence_items),
     )
 
     root_cause = generate_root_cause_analysis(

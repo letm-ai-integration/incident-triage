@@ -195,13 +195,12 @@ After `investigation`, the top-level graph continues
 (`app/graph/workflow.py`):
 
 ```text
-ingestion → classification ─┬─> full_investigation ─> investigation ─> investigation_summary
-                            └─> auto_resolve ────────────────────────────────┐
-                                                                             │
-        rca_report → approval → verification ─> completed/reinvestigate <────┘
+ingestion → classification ─┬─> full_investigation ─> investigation ─┐
+                            └─> auto_resolve ─────────────────────────┤
+                                                                      │
+        rca_report → approval → verification ─> completed/reinvestigate
 ```
 
-* **investigation_summary** aggregates evidence into `state["investigation_summary"]`.
 * **rca_report** (`app/services/rca_report_service.py`) builds
   `RootCauseAnalysis` from the shared evidence/hypotheses. **Runbook-backed
   resolution lands here:** when `state["runbook_name"]` and

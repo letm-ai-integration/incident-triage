@@ -49,7 +49,6 @@ def _default_rca_report(state: IncidentState, deps: dict) -> dict:
     hypotheses = state.get("hypotheses", [])
     findings = validate_hypotheses(incident, evidence, hypotheses)
     top = max(hypotheses, key=lambda h: h.confidence) if hypotheses else _fallback_hypothesis()
-    summary = state.get("investigation_summary") or {}
 
     root_cause = RootCauseAnalysis(
         primary_cause=top,
@@ -94,7 +93,7 @@ def _default_rca_report(state: IncidentState, deps: dict) -> dict:
         classification=classification,
         evidence=EvidenceCollection(
             items=evidence,
-            summary=summary.get("summary", f"{len(evidence)} evidence item(s) collected"),
+            summary=_evidence_summary(evidence),
         ),
         hypotheses=hypotheses,
         root_cause=root_cause,
@@ -114,6 +113,14 @@ def _default_rca_report(state: IncidentState, deps: dict) -> dict:
         "expected_outcome": expected_outcome,
         "claim_validation": findings,
     }
+
+
+def _evidence_summary(evidence: list) -> str:
+    """One-line deterministic summary of the collected evidence."""
+    if not evidence:
+        return "No evidence item(s) collected"
+    sources = sorted({item.source for item in evidence})
+    return f"{len(evidence)} evidence item(s) collected from {sources}"
 
 
 def _recommended_actions(expected_outcome: dict, runbook_references: list) -> list:

@@ -17,6 +17,7 @@ from typing import Any
 
 from app.graph.events import NodeEvent
 from app.ui import theme
+from app.ui.format_label import humanize_node_name
 
 
 def _esc(text: Any) -> str:
@@ -66,7 +67,7 @@ def _agent_trace_svg(trace: list[dict[str, Any]]) -> str:
     _TYPE_LABEL = {"llm_call": "LLM call", "tool_call": "tool", "subagent": "sub-agent"}
     for i, call in enumerate(trace, start=1):
         ctype = call.get("type", "call")
-        name = call.get("name", ctype)
+        name = humanize_node_name(call.get("name", ctype))
         # No status yet == still in flight (live view of a running node).
         status = call.get("status") or "running"
         if status == "success":
@@ -108,7 +109,8 @@ def render_detail(event: NodeEvent) -> str:
         f'<div style="display:flex;justify-content:space-between;align-items:center;">'
         f'<span><span class="it-status-pill" style="background:{color}">'
         f'{_esc(theme.status_label(event.status))}</span> '
-        f'<b style="color:{theme.TEXT};text-transform:none;">{_esc(event.node_name)}</b></span>'
+        f'<b style="color:{theme.TEXT};text-transform:none;">'
+        f'{_esc(humanize_node_name(event.node_name))}</b></span>'
         f'<span class="it-duration">⏱ {_esc(_duration_text(event.duration_ms))}</span></div>'
         f'<div class="it-muted">run {_esc(event.run_id)}</div>'
     )
@@ -136,4 +138,30 @@ def render_detail(event: NodeEvent) -> str:
         f'<div style="background:{theme.SURFACE};border:1px solid {theme.BORDER};'
         f'border-radius:8px;padding:10px;">{header}<hr style="border-color:{theme.BORDER}">'
         f'{"".join(sections)}</div>'
+    )
+
+
+def render_detail_bar(event: NodeEvent | None) -> str:
+    """Compact single-row bar for the collapsed Active Node Detail row (Phase 3).
+
+    Shows the humanized node name, the status badge (coloured exactly like the
+    graph nodes) and the elapsed time. ``None`` renders a muted waiting bar.
+    """
+    if event is None:
+        return (
+            f'<div style="display:flex;justify-content:space-between;align-items:center;'
+            f'background:{theme.SURFACE};border:1px dashed {theme.BORDER};'
+            f'border-radius:8px;padding:8px 12px;">'
+            f'<span class="it-muted">Waiting for the first node…</span></div>'
+        )
+    color = theme.status_color(event.status)
+    return (
+        f'<div style="display:flex;justify-content:space-between;align-items:center;'
+        f'background:{theme.SURFACE};border:1px solid {theme.BORDER};'
+        f'border-radius:8px;padding:8px 12px;">'
+        f'<span style="display:flex;align-items:center;gap:10px;">'
+        f'<span class="it-status-pill" style="background:{color}">'
+        f'{_esc(theme.status_label(event.status))}</span>'
+        f'<b style="color:{theme.TEXT}">{_esc(humanize_node_name(event.node_name))}</b></span>'
+        f'<span class="it-duration">⏱ {_esc(_duration_text(event.duration_ms))}</span></div>'
     )

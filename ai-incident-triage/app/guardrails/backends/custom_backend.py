@@ -107,10 +107,21 @@ def _check_safety_llama_guard(context: GuardrailContext, guard_model) -> Guardra
         [{"role": "user", "content": context.content}]
     )
     text = (response.content or "").strip().lower()
+    if not text:
+        # Empty verdict == the guard model is unavailable/degraded, not that the
+        # content is unsafe. Fail over to the deterministic keyword check rather
+        # than hard-blocking every notification with no findings at all.
+        logger.warning(
+            "[custom_backend] Llama Guard returned an empty verdict; "
+            "falling back to keyword check"
+        )
+        return _check_safety_keyword(context)
     passed = text.startswith("safe")
     findings: list[str] = []
     if not passed:
         findings = [line.strip() for line in text.splitlines() if line.strip()]
+        if not findings:
+            findings = [f"safety: unparsed guard verdict {text!r}"]
     return GuardrailResult(
         node_name=context.node_name,
         passed=passed,

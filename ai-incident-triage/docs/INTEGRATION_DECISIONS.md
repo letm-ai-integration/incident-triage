@@ -21,7 +21,7 @@ see `README.md` and `incident-triage-HLD.md`.
   `log_analysis` / `kubernetes_analysis` / `runbook_analysis` /
   `runbook_hypothesis`), which `app/services/investigation_service.py` writes
   into the canonical `IncidentState` — nothing is isolated inside the
-  orchestrator. Downstream nodes (`investigation_summary`, `rca_report`,
+  orchestrator. Downstream nodes (`rca_report`,
   verification) consume those state fields; they never re-run the same
   investigation.
 - **The orchestrator service is the node's default**: `investigation_node`
