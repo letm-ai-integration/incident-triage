@@ -19,13 +19,24 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any, TypeVar
 
 from langchain.agents import create_agent as _create_agent
 from langchain_openai import ChatOpenAI
-from openai import AsyncOpenAI, OpenAI
+from openai import (
+    APIConnectionError,
+    APIStatusError,
+    APITimeoutError,
+    AsyncOpenAI,
+    AuthenticationError,
+    NotFoundError,
+    OpenAI,
+    PermissionDeniedError,
+    RateLimitError,
+)
 from pydantic import BaseModel, SecretStr
 
 from app.config import get_settings
@@ -263,8 +274,151 @@ async def async_chat_completion(messages: Sequence[Any], model: str | None = Non
     )
 
 
+# ---------------------------------------------------------------------------
+# Preflight availability check (infrastructure gate, NOT a workflow step).
+#
+# Config presence ("is there an API key string?") says nothing about whether
+# the key is valid or the provider is reachable *right now*. Both entry points
+# (CLI + Streamlit) run this once before the graph starts, so a bad key /
+# downed provider / network problem short-circuits the run instead of failing
+# halfway through and wasting a run.
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class LLMPreflightResult:
+    """Outcome of the pre-run LLM availability check."""
+
+    ok: bool
+    # "" | "not_configured" | "invalid_key" | "unreachable" | "model_error"
+    # | "provider_error" -- distinct because the fixes differ.
+    reason: str
+    message: str  # human-readable, actionable, entry-point-ready
+
+
+def run_llm_preflight(timeout: int | None = None) -> LLMPreflightResult:
+    """Verify the active provider is configured AND reachable via a real call.
+
+    Makes one minimal chat-completion request (``max_tokens=1``, no retries,
+    short timeout) so the key, model id, and network path are all exercised.
+    Cost is a single token; latency is one round trip (~0.3-1.5 s), once per
+    run -- negligible against a multi-node LLM pipeline.
+    """
+    settings = get_settings()
+    cfg = settings.active_llm_config()
+    provider = settings.llm_provider.value
+    if not cfg["api_key"]:
+        return LLMPreflightResult(
+            ok=False,
+            reason="not_configured",
+            message=(
+                f"No API key configured for LLM provider '{provider}'. "
+                f"Set the provider's API key in .env and retry."
+            ),
+        )
+
+    effective_timeout = timeout if timeout is not None else min(10, settings.llm_timeout)
+    started = time.monotonic()
+    try:
+        client = OpenAI(
+            api_key=cfg["api_key"],
+            base_url=cfg["base_url"],
+            timeout=effective_timeout,
+            max_retries=0,  # fail fast: retrying a dead provider only adds latency
+        )
+        client.chat.completions.create(
+            model=cfg["model"],
+            messages=[{"role": "user", "content": "ping"}],
+            max_tokens=1,
+        )
+    except AuthenticationError:
+        return LLMPreflightResult(
+            ok=False,
+            reason="invalid_key",
+            message=(
+                f"API key rejected by LLM provider '{provider}' (401 unauthorized). "
+                "The key is invalid, revoked, or expired -- fix or replace it in .env."
+            ),
+        )
+    except PermissionDeniedError:
+        return LLMPreflightResult(
+            ok=False,
+            reason="invalid_key",
+            message=(
+                f"API key is valid but not authorized for model "
+                f"'{cfg['model']}' on provider '{provider}' (403). "
+                "Grant the key access to this model or pick a model it can use."
+            ),
+        )
+    except (APITimeoutError, APIConnectionError) as exc:
+        return LLMPreflightResult(
+            ok=False,
+            reason="unreachable",
+            message=(
+                f"LLM provider '{provider}' unreachable ({cfg['base_url']}): "
+                f"{type(exc).__name__} -- check network connectivity, the "
+                "provider's status page, and the base_url in .env."
+            ),
+        )
+    except NotFoundError:
+        return LLMPreflightResult(
+            ok=False,
+            reason="model_error",
+            message=(
+                f"LLM provider '{provider}' does not know model '{cfg['model']}' "
+                "(404) -- fix the model id in .env."
+            ),
+        )
+    except RateLimitError:
+        # 429 proves the key was accepted and the provider is reachable; a
+        # transient quota blip is not an infrastructure failure.
+        return LLMPreflightResult(
+            ok=True,
+            reason="",
+            message=(
+                f"LLM provider '{provider}' reachable (rate-limited, 429 -- "
+                "key accepted; expect throttling during the run)."
+            ),
+        )
+    except APIStatusError as exc:
+        return LLMPreflightResult(
+            ok=False,
+            reason="provider_error",
+            message=(
+                f"LLM provider '{provider}' returned HTTP {exc.status_code} on "
+                f"the preflight call -- the provider is up but erroring "
+                f"({type(exc).__name__}). Retry shortly or check its status page."
+            ),
+        )
+    except Exception as exc:  # noqa: BLE001 -- gate must classify any failure
+        return LLMPreflightResult(
+            ok=False,
+            reason="provider_error",
+            message=(
+                f"LLM provider '{provider}' preflight call failed: "
+                f"{type(exc).__name__}: {exc}"
+            ),
+        )
+    elapsed_ms = int((time.monotonic() - started) * 1000)
+    logger.info(
+        "[llm.client] preflight ok provider=%s model=%s in %sms",
+        provider,
+        cfg["model"],
+        elapsed_ms,
+    )
+    return LLMPreflightResult(
+        ok=True,
+        reason="",
+        message=(
+            f"LLM provider '{provider}' reachable; model '{cfg['model']}' "
+            f"responded ({elapsed_ms} ms)."
+        ),
+    )
+
+
 __all__ = [
     "LLM",
+    "LLMPreflightResult",
     "LLMConfigurationError",
     "async_chat_completion",
     "bind_tools",
@@ -276,4 +430,5 @@ __all__ = [
     "get_chat_model",
     "get_client",
     "get_groq_guard_chat_model",
+    "run_llm_preflight",
 ]

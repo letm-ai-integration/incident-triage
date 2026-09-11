@@ -6,7 +6,10 @@ provider/client construction is local and completion calls are mocked.
 
 import asyncio
 import importlib
+import types
 
+import httpx
+import openai
 import pytest
 from langchain_core.tools import tool
 from pydantic import BaseModel
@@ -345,5 +348,133 @@ def test_package_exposes_client_api():
         "async_chat_completion",
         "LLM",
         "LLMConfigurationError",
+        "run_llm_preflight",
+        "LLMPreflightResult",
     ):
         assert hasattr(pkg, name)
+
+
+# ------------------------------------------------------------- preflight ----
+
+
+def _http_error(exc_cls: type, status: int) -> Exception:
+    """Build a real openai APIStatusError subclass with an httpx response."""
+    request = httpx.Request("POST", "https://provider.test/v1/chat/completions")
+    response = httpx.Response(status_code=status, request=request)
+    return exc_cls("boom", response=response, body=None)
+
+
+class _FakeCompletions:
+    def __init__(self, exc: Exception | None = None) -> None:
+        self.exc = exc
+        self.calls: list[dict] = []
+
+    def create(self, **kwargs):  # noqa: ANN003
+        self.calls.append(kwargs)
+        if self.exc is not None:
+            raise self.exc
+        return types.SimpleNamespace(id="preflight-ok")
+
+
+class _FakeChat:
+    def __init__(self, completions: _FakeCompletions) -> None:
+        self.completions = completions
+
+
+class _FakeClient:
+    """Records constructor kwargs; returns a stub completions endpoint."""
+
+    last_kwargs: dict = {}
+
+    def __init__(self, **kwargs) -> None:
+        type(self).last_kwargs = kwargs
+        self.chat = _FakeChat(_FakeClient.completions)
+
+
+def _install(monkeypatch: pytest.MonkeyPatch, exc: Exception | None = None) -> _FakeClient:
+    """Point run_llm_preflight at a fake OpenAI client raising ``exc``."""
+    _FakeClient.completions = _FakeCompletions(exc)
+    monkeypatch.setattr(client, "OpenAI", _FakeClient)
+    return _FakeClient
+
+
+@pytest.fixture
+def keyed(monkeypatch):
+    monkeypatch.setattr(settings, "llm_provider", LLMProvider.OPENROUTER)
+    monkeypatch.setattr(settings, "openrouter_api_key", "test-key")
+    monkeypatch.setattr(settings, "openrouter_model", "test/model")
+    monkeypatch.setattr(settings, "openrouter_base_url", "https://provider.test/v1")
+    monkeypatch.setattr(settings, "llm_timeout", 60)
+
+
+def test_preflight_passes_and_is_cheap(keyed, monkeypatch):
+    fake = _install(monkeypatch)
+    result = client.run_llm_preflight()
+    assert result.ok is True and result.reason == ""
+    # Cheap call: no retries, short timeout, exactly 1 token.
+    assert fake.last_kwargs["max_retries"] == 0
+    assert fake.last_kwargs["timeout"] <= 10
+    assert fake.completions.calls[0]["max_tokens"] == 1
+
+
+def test_preflight_missing_key(keyed, monkeypatch):
+    monkeypatch.setattr(settings, "openrouter_api_key", "")
+    result = client.run_llm_preflight()
+    assert result.ok is False and result.reason == "not_configured"
+    assert "No API key" in result.message
+
+
+def test_preflight_invalid_key(keyed, monkeypatch):
+    _install(monkeypatch, _http_error(openai.AuthenticationError, 401))
+    result = client.run_llm_preflight()
+    assert result.ok is False and result.reason == "invalid_key"
+    assert "401" in result.message
+
+
+def test_preflight_permission_denied_maps_to_invalid_key(keyed, monkeypatch):
+    _install(monkeypatch, _http_error(openai.PermissionDeniedError, 403))
+    result = client.run_llm_preflight()
+    assert result.ok is False and result.reason == "invalid_key"
+    assert "403" in result.message
+
+
+def test_preflight_rate_limit_counts_as_reachable(keyed, monkeypatch):
+    _install(monkeypatch, _http_error(openai.RateLimitError, 429))
+    result = client.run_llm_preflight()
+    assert result.ok is True  # 429 proves key accepted + provider reachable
+    assert "429" in result.message
+
+
+def test_preflight_timeout_is_unreachable(keyed, monkeypatch):
+    request = httpx.Request("POST", "https://provider.test/v1/chat/completions")
+    _install(monkeypatch, openai.APITimeoutError(request=request))
+    result = client.run_llm_preflight()
+    assert result.ok is False and result.reason == "unreachable"
+
+
+def test_preflight_connection_error_is_unreachable(keyed, monkeypatch):
+    request = httpx.Request("POST", "https://provider.test/v1/chat/completions")
+    _install(monkeypatch, openai.APIConnectionError(request=request))
+    result = client.run_llm_preflight()
+    assert result.ok is False and result.reason == "unreachable"
+    assert "provider.test" in result.message
+
+
+def test_preflight_unknown_model(keyed, monkeypatch):
+    _install(monkeypatch, _http_error(openai.NotFoundError, 404))
+    result = client.run_llm_preflight()
+    assert result.ok is False and result.reason == "model_error"
+
+
+def test_preflight_provider_5xx(keyed, monkeypatch):
+    _install(monkeypatch, _http_error(openai.APIStatusError, 503))
+    result = client.run_llm_preflight()
+    assert result.ok is False and result.reason == "provider_error"
+    assert "503" in result.message
+
+
+def test_preflight_unexpected_exception_classified(keyed, monkeypatch):
+    _install(monkeypatch, RuntimeError("dns exploded"))
+    result = client.run_llm_preflight()
+    assert result.ok is False and result.reason == "provider_error"
+    assert "RuntimeError" in result.message

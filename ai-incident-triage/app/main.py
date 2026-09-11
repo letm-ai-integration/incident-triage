@@ -23,6 +23,7 @@ import typer
 
 from app.config import get_settings
 from app.graph.workflow import stream_triage_graph
+from app.llm.client import run_llm_preflight
 from app.services.classification_service import classification_service
 from app.services.investigation_service import investigation_service
 from app.services.notification_service import notification_service
@@ -65,6 +66,15 @@ def triage(
 ) -> None:
     """Triage ``incident_file`` through the graph and print the result."""
     raw_input = _load_incident(incident_file)
+
+    # Infrastructure gate: verify the LLM provider is actually reachable with
+    # the configured key BEFORE the graph starts -- a run that would fail
+    # halfway through is worse than no run.
+    preflight = run_llm_preflight()
+    if not preflight.ok:
+        typer.echo(f"error: LLM preflight failed: {preflight.message}", err=True)
+        raise typer.Exit(code=2)
+    typer.echo(f"LLM preflight: {preflight.message}")
 
     deps: dict[str, Any] = {
         "investigation_service": investigation_service,

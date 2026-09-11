@@ -53,6 +53,12 @@ def _entry_duration(call: dict[str, Any]) -> str:
             except ValueError:
                 started = None
         if isinstance(started, datetime):
+            # Live trace entries may carry a naive timestamp (e.g.
+            # ``datetime.now().isoformat()`` without tz); assuming UTC keeps
+            # the elapsed-so-far arithmetic from raising TypeError on the
+            # naive/aware subtraction.
+            if started.tzinfo is None:
+                started = started.replace(tzinfo=UTC)
             elapsed = (datetime.now(UTC) - started).total_seconds() * 1000.0
             return f"{_duration_text(elapsed)} (so far)"
     return "—"
@@ -65,7 +71,10 @@ def _agent_trace_svg(trace: list[dict[str, Any]]) -> str:
 
     parts = []
     _TYPE_LABEL = {"llm_call": "LLM call", "tool_call": "tool", "subagent": "sub-agent"}
-    for i, call in enumerate(trace, start=1):
+    # Skip anything that is not a trace-entry dict (defensive: a malformed
+    # entry must never crash the whole detail panel).
+    valid = [c for c in trace if isinstance(c, dict)]
+    for i, call in enumerate(valid, start=1):
         ctype = call.get("type", "call")
         name = humanize_node_name(call.get("name", ctype))
         # No status yet == still in flight (live view of a running node).
@@ -138,6 +147,56 @@ def render_detail(event: NodeEvent) -> str:
         f'<div style="background:{theme.SURFACE};border:1px solid {theme.BORDER};'
         f'border-radius:8px;padding:10px;">{header}<hr style="border-color:{theme.BORDER}">'
         f'{"".join(sections)}</div>'
+    )
+
+
+def render_detail_panel(event: NodeEvent | None, max_height: int = 460) -> str:
+    """Collapsible Active Node Detail row, ALWAYS collapsed by default (pure CSS).
+
+    Uses a ``<details>`` disclosure instead of a Streamlit toggle: expanding /
+    collapsing is handled entirely browser-side and never triggers a script
+    rerun, so clicking it mid-run cannot abandon the streaming run (the old
+    toggle did exactly that -- the rerun dropped the generator and wiped the
+    UI). ``None`` renders just the muted waiting bar -- nothing to disclose.
+
+    By default the details stay hidden (nobody wants them forced open on every
+    render); the user expands them on demand. Long content scrolls inside the
+    fixed-height expanded body, so expanding never pushes the graph canvas
+    around.
+    """
+    if event is None:
+        return render_detail_bar(None)
+
+    summary = render_detail_bar(event)
+    has_content = bool(
+        event.error
+        or event.input_snapshot is not None
+        or event.output_snapshot is not None
+        or event.agent_trace
+    )
+    if has_content:
+        body = render_detail(event)
+    else:
+        body = (
+            '<div style="background:{surface};border:1px solid {border};'
+            'border-radius:8px;padding:10px;">'.format(
+                surface=theme.SURFACE, border=theme.BORDER
+            )
+            + '<span class="it-muted">No detailed logs available for this node yet '
+            "(it may still be running, or this step is deterministic and captures "
+            "no snapshots).</span></div>"
+        )
+
+    return (
+        '<details '
+        f'style="border:1px solid {theme.BORDER};border-radius:8px;'
+        f'background:{theme.SURFACE};padding:0;">'
+        f'<summary style="list-style:none;cursor:pointer;padding:0;">'
+        f'{summary}<span class="it-muted" style="padding:0 12px;'
+        f'font-size:11px;">&#9660; details</span></summary>'
+        f'<div style="max-height:{max_height}px;overflow-y:auto;'
+        f'padding:0 8px 8px 8px;">{body}</div>'
+        f"</details>"
     )
 
 

@@ -24,7 +24,6 @@ from pathlib import Path
 from typing import Any
 
 import streamlit as st
-import streamlit.components.v1 as components
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 logger = logging.getLogger("streamlit_app")
@@ -38,12 +37,13 @@ from app.domain.models.report import IncidentReport
 from app.graph.events import NodeEvent
 from app.graph.introspect import get_graph_topology
 from app.graph.workflow import stream_triage_graph, triage_graph
+from app.llm.client import run_llm_preflight
 from app.services.classification_service import classification_service
 from app.services.investigation_service import investigation_service
 from app.services.notification_service import notification_service
 from app.services.rca_report_service import rca_report_service, render_markdown_report
 from app.ui import theme
-from app.ui.render_detail import render_detail, render_detail_bar
+from app.ui.render_detail import render_detail, render_detail_bar, render_detail_panel
 from app.ui.render_graph import render_graph
 from app.ui.render_timeline import render_timeline
 
@@ -109,6 +109,10 @@ def _render_sidebar() -> dict[str, Any]:
     llm_available = _llm_configured()
     if not llm_available:
         st.sidebar.info("No LLM API key configured -- running on deterministic rule-based fallbacks.")
+    logger.info(
+        "[ui] LLM provider configured: %s",
+        "yes" if llm_available else "no",
+    )
 
     deps: dict[str, Any] = {
         # Investigation/notification services work without an LLM key (they
@@ -126,10 +130,13 @@ def _render_sidebar() -> dict[str, Any]:
         deps["classification_service"] = classification_service
         deps["rca_report_service"] = rca_report_service
 
-    # Compact status area: the provider indicator is folded in directly above
-    # the legend, and the legend itself is collapsed by default (it is only a
-    # reference -- expand on demand instead of occupying permanent space).
-    st.sidebar.caption(f"LLM provider configured: {'yes' if llm_available else 'no'}")
+    # Compact status area: the legend itself is collapsed by default (it is
+    # only a reference -- expand on demand instead of occupying permanent
+    # space). The provider-configured indicator is intentionally NOT shown in
+    # the UI -- it is logged in _render_sidebar instead.
+    last_preflight = st.session_state.get("llm_preflight")
+    if last_preflight:
+        st.sidebar.caption(f"Last preflight: {last_preflight}")
     with st.sidebar.expander("Status legend", expanded=False):
         st.markdown(theme.legend_html(), unsafe_allow_html=True)
     return deps
@@ -278,23 +285,21 @@ def _panel_height(topology: dict[str, Any]) -> int:
 def _graph_autoscroll(run_id: str, node_name: str | None) -> None:
     """Pan the graph container to ``node_name`` -- until the user scrolls.
 
-    Emits a tiny same-origin script (Streamlit strips scripts from markdown,
-    but ``components.html`` runs in a same-origin iframe that can reach the
-    parent document) that centers the node element in the graph's scrollable
-    container. The first wheel / touch / press on that container latches the
-    helper "off" for the current run (``sessionStorage``, survives Streamlit
-    reruns), so once the user takes over scrolling, auto-follow stops entirely
-    and never fights them again.
+    Emits a tiny script via ``st.html`` (injects straight into the page DOM)
+    that centers the node element in the graph's scrollable container. The
+    first wheel / touch / press on that container latches the helper "off" for
+    the current run (``sessionStorage``, survives Streamlit reruns), so once
+    the user takes over scrolling, auto-follow stops entirely and never fights
+    them again.
     """
     if not node_name:
         return
     script = """<script>(function(){
-  var doc = window.parent.document;
-  var wrap = doc.getElementById('it-graph-canvas');
+  var wrap = document.getElementById('it-graph-canvas');
   if (!wrap) return;
   function scrollable(el){
-    while (el && el !== doc.body){
-      var s = window.parent.getComputedStyle(el);
+    while (el && el !== document.body){
+      var s = getComputedStyle(el);
       if (el.scrollHeight > el.clientHeight + 4 && /(auto|scroll)/.test(s.overflowY)) return el;
       el = el.parentElement;
     }
@@ -303,7 +308,7 @@ def _graph_autoscroll(run_id: str, node_name: str | None) -> None:
   var scroller = scrollable(wrap);
   if (!scroller) return;
   var key = 'it-autoscroll-__RUN__';
-  var latchOff = function(){ try { window.parent.sessionStorage.setItem(key, 'off'); } catch (e) {} };
+  var latchOff = function(){ try { sessionStorage.setItem(key, 'off'); } catch (e) {} };
   if (!scroller.dataset.itBound){
     scroller.addEventListener('wheel', latchOff, {passive:true});
     scroller.addEventListener('touchmove', latchOff, {passive:true});
@@ -311,47 +316,22 @@ def _graph_autoscroll(run_id: str, node_name: str | None) -> None:
     scroller.dataset.itBound = '1';
   }
   var mode = null;
-  try { mode = window.parent.sessionStorage.getItem(key); } catch (e) {}
+  try { mode = sessionStorage.getItem(key); } catch (e) {}
   if (mode === 'off') return;
-  var target = doc.getElementById('node-__NODE__');
+  var target = document.getElementById('node-__NODE__');
   if (!target) return;
   var r = target.getBoundingClientRect();
   var sr = scroller.getBoundingClientRect();
   scroller.scrollTop += (r.top + r.height / 2) - (sr.top + sr.clientHeight / 2);
 })();</script>"""
-    components.html(
-        script.replace("__RUN__", run_id).replace("__NODE__", node_name),
-        height=0,
-    )
+    st.html(script.replace("__RUN__", run_id).replace("__NODE__", node_name))
 
 
-# Phase 3: generous but fixed max height for the expanded Active Node Detail
-# row -- long JSON/log content scrolls *within* the row instead of growing it.
-_DETAIL_MAX_H = 460
-
-
-def _render_detail_row() -> Any:
-    """Render the collapsible Active Node Detail row (Phase 3) and return its slot.
-
-    The row sits directly ABOVE the "Graph canvas" section and spans the same
-    width. It is collapsed by default: a single compact bar (humanized node
-    name + status badge + elapsed time). Toggling "Show details" expands it
-    into a fixed-height, internally scrollable container holding the full
-    input/output/agent-trace detail, so the graph canvas below never gets
-    pushed around by long content.
-    """
-    head_col, toggle_col = st.columns([0.85, 0.15])
-    with head_col:
-        st.markdown(
-            '<div class="it-zone-title">Active node &middot; detail</div>',
-            unsafe_allow_html=True,
-        )
-    with toggle_col:
-        st.toggle("Show details", key="detail_expanded")
-    if st.session_state.get("detail_expanded"):
-        with st.container(height=_DETAIL_MAX_H, border=True):
-            return st.empty()
-    return st.empty()
+# Phase 3: Active Node Detail is a full-width row directly ABOVE the graph
+# canvas, collapsed by default via a pure-CSS <details> disclosure (no
+# Streamlit widget -> no script rerun -> a click mid-run can never abandon
+# the streaming generator or wipe the UI). render_detail_panel() owns the
+# collapsed bar, empty state, and the fixed-height scrollable expanded body.
 
 
 def _render_live_zones(
@@ -397,13 +377,10 @@ def _render_live_zones(
         if live:
             event.agent_trace = live
     if event is None:
-        detail_slot.markdown(render_detail_bar(None), unsafe_allow_html=True)
+        detail_slot.markdown(render_detail_panel(None), unsafe_allow_html=True)
         return
-    # Collapsed (default): compact bar only. Expanded: full detail panel.
-    if st.session_state.get("detail_expanded"):
-        detail_slot.markdown(render_detail(event), unsafe_allow_html=True)
-    else:
-        detail_slot.markdown(render_detail_bar(event), unsafe_allow_html=True)
+    # Collapsed-by-default <details> row (browser-side toggle; no rerun).
+    detail_slot.markdown(render_detail_panel(event), unsafe_allow_html=True)
 
 
 def _execute_run(raw_input: dict[str, Any], deps: dict[str, Any]) -> None:
@@ -413,14 +390,25 @@ def _execute_run(raw_input: dict[str, Any], deps: dict[str, Any]) -> None:
     emitted ``NodeEvent`` re-renders the graph canvas, execution timeline and
     detail panel in place -- no ``st.rerun()`` is needed between events.
     """
+    # Infrastructure gate (NOT a workflow step): confirm the LLM provider is
+    # actually reachable with the configured key before the graph starts.
+    # LLM-backed agents are always on, so a bad key / unreachable provider
+    # would otherwise waste a run and die halfway through the graph.
+    preflight = run_llm_preflight()
+    st.session_state["llm_preflight"] = preflight.message
+    if not preflight.ok:
+        st.error(f"**Run aborted -- LLM preflight failed.** {preflight.message}")
+        return
+
     run_id = str(uuid4())
     st.markdown("## Live execution")
     topology = get_graph_topology(triage_graph)
     panel_h = _panel_height(topology)
 
-    # Phase 3: Active Node Detail is a full-width collapsible row directly
-    # ABOVE the graph canvas (collapsed by default).
-    detail_slot = _render_detail_row()
+    # Phase 3: Active Node Detail is a full-width row directly ABOVE the
+    # graph canvas (collapsed by default; browser-side <details> disclosure).
+    st.markdown('<div class="it-zone-title">Active node &middot; detail</div>', unsafe_allow_html=True)
+    detail_slot = st.empty()
     st.markdown('<div class="it-zone-title">Graph canvas</div>', unsafe_allow_html=True)
     # Fixed-height, internally-scrollable zone (graph canvas + timeline) so
     # the page stays compact regardless of how long the run gets.
@@ -542,9 +530,10 @@ def _render_saved_run(active: dict[str, Any]) -> None:
     topology = get_graph_topology(triage_graph)
     panel_h = _panel_height(topology)
 
-    # Phase 3: Active Node Detail row above the graph canvas, collapsed by
-    # default; the node picker lives inside the expanded container.
-    detail_slot = _render_detail_row()
+    # Phase 3: Active Node Detail row above the graph canvas; the node picker
+    # selects which node to inspect (post-run, so interactions are safe).
+    st.markdown('<div class="it-zone-title">Active node &middot; detail</div>', unsafe_allow_html=True)
+    detail_slot = st.empty()
     st.markdown('<div class="it-zone-title">Graph canvas</div>', unsafe_allow_html=True)
     with st.container(height=panel_h, border=True):
         st.markdown(
@@ -564,28 +553,18 @@ def _render_saved_run(active: dict[str, Any]) -> None:
 
     order = active.get("node_order", [])
     default_index = max(len(order) - 1, 0)
+    # Manual override: the user picks which node to inspect; this selection
+    # persists until they change it (auto-follow only applies while a *live*
+    # run is streaming). Post-run interactions are safe -- no stream to lose.
+    label = st.selectbox("Inspect node", order, index=default_index,
+                         key=f"detail_node_{active['run_id']}")
+    event = _merged_event(active["events"], label) if label else None
+    detail_slot.markdown(render_detail_panel(event), unsafe_allow_html=True)
     # Auto-follow the inspected node on re-render too (same user-scroll latch).
     _graph_autoscroll(
         str(active.get("run_id") or ""),
-        order[default_index] if order else None,
+        label or None,
     )
-    if st.session_state.get("detail_expanded"):
-        with detail_slot.container():
-            # Manual override: the user picks which node to inspect; this
-            # selection persists until they change it (auto-follow only applies
-            # while a *live* run is streaming).
-            label = st.selectbox("Inspect node", order, index=default_index,
-                                 key=f"detail_node_{active['run_id']}")
-            event = _merged_event(active["events"], label) if label else None
-            st.markdown(
-                render_detail(event) if event
-                else '<span class="it-muted">No node selected.</span>',
-                unsafe_allow_html=True,
-            )
-    else:
-        label = order[default_index] if order else None
-        event = _merged_event(active["events"], label) if label else None
-        detail_slot.markdown(render_detail_bar(event), unsafe_allow_html=True)
 
     st.markdown("---")
     if active.get("final_state"):

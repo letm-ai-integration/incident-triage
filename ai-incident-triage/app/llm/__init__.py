@@ -1,6 +1,7 @@
 # LLM stack: single provider-agnostic adapter.
 from app.llm.client import (
     LLM,
+    LLMPreflightResult,
     LLMConfigurationError,
     async_chat_completion,
     bind_tools,
@@ -11,10 +12,12 @@ from app.llm.client import (
     get_async_client,
     get_chat_model,
     get_client,
+    run_llm_preflight,
 )
 
 __all__ = [
     "LLM",
+    "LLMPreflightResult",
     "LLMConfigurationError",
     "async_chat_completion",
     "bind_tools",
@@ -25,4 +28,5 @@ __all__ = [
     "get_async_client",
     "get_chat_model",
     "get_client",
+    "run_llm_preflight",
 ]

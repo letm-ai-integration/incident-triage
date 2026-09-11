@@ -10,7 +10,7 @@ import pytest
 from app.agents.notification import agent as agent_module
 from app.agents.notification.agent import NotificationResult, run_notification_agent
 from app.agents.notification.parser import (
-    NotificationEmail,
+    NotificationSubject,
     parse_notification_response,
 )
 from app.domain.enums.incident_type import IncidentType
@@ -95,7 +95,7 @@ def test_success_path_sends_email_to_oncall_contact(monkeypatch):
         agent_module,
         "create_structured_agent",
         lambda **kwargs: _FakeAgent(
-            NotificationEmail(subject="[P1] payments-api incident resolved", body="<p>root cause fixed</p>")
+            NotificationSubject(subject="[P1] INC-42 payments-api RCA report")
         ),
     )
     monkeypatch.setattr(agent_module, "send_email", _fake_send(captured))
@@ -108,13 +108,110 @@ def test_success_path_sends_email_to_oncall_contact(monkeypatch):
     assert result.recipient == "ayush.sharma@example.com"
     assert result.message_id == "msg-123"
     assert captured["to"] == "ayush.sharma@example.com"
-    assert captured["subject"] == "[P1] payments-api incident resolved"
-    assert captured["html_body"] == "<p>root cause fixed</p>"
+    assert captured["subject"] == "[P1] INC-42 payments-api RCA report"
+    # The body is ALWAYS the fixed HTML template -- never LLM output.
+    assert "<table" in captured["html_body"]
+    assert "1 · Incident Overview" in captured["html_body"]
+    assert "8 · Investigation Status" in captured["html_body"]
+
+
+def test_llm_subject_failure_still_sends_styled_template(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(agent_module, "get_current_oncall", lambda: _oncall())
+
+    def boom(**kwargs):
+        raise RuntimeError("LLM unreachable")
+
+    monkeypatch.setattr(agent_module, "create_structured_agent", boom)
+    monkeypatch.setattr(agent_module, "send_email", _fake_send(captured))
+
+    pending = _report().model_copy(
+        update={"verification": VerificationResult(is_resolved=False, needs_reinvestigation=True)}
+    )
+    result = run_notification_agent(pending)
+
+    assert result.success is True
+    # Deterministic honest subject + styled template body.
+    assert "(remediation pending)" in captured["subject"]
+    assert "<table" in captured["html_body"]
+
+
+def test_llm_subject_claiming_resolution_is_rejected_when_pending(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(agent_module, "get_current_oncall", lambda: _oncall())
+    monkeypatch.setattr(
+        agent_module,
+        "create_structured_agent",
+        lambda **kwargs: _FakeAgent(NotificationSubject(subject="[P1] INC-42 incident FIXED")),
+    )
+    monkeypatch.setattr(agent_module, "send_email", _fake_send(captured))
+
+    pending = _report().model_copy(
+        update={"verification": VerificationResult(is_resolved=False, needs_reinvestigation=True)}
+    )
+    result = run_notification_agent(pending)
+
+    assert result.success is True
+    # Honesty gate replaces the claiming subject with the deterministic one.
+    assert "FIXED" not in captured["subject"]
+    assert "(remediation pending)" in captured["subject"]
+
+
+def test_send_refuses_non_html_body(monkeypatch):
+    """The adapter must fail loudly rather than degrade to plain text."""
+    import types
+
+    import app.tools.adapters.resend_email as adapter
+
+    monkeypatch.setattr(
+        adapter, "get_settings",
+        lambda: types.SimpleNamespace(
+            resend_api_key="test-key", resend_from_name="T", resend_from_email="t@example.com"
+        ),
+    )
+    with pytest.raises(EmailSendError, match="no HTML markup"):
+        adapter.send_email("a@example.com", "s", "plain text, no markup at all")
+
+
+def test_multi_incident_bodies_are_always_styled_html(monkeypatch):
+    """Full + edge-case reports: every body is the styled HTML template."""
+    captured: list[dict] = []
+
+    def capturing_send(to, subject, html_body):
+        captured.append({"to": to, "subject": subject, "html_body": html_body})
+        return "msg-x"
+
+    monkeypatch.setattr(agent_module, "get_current_oncall", lambda: _oncall())
+    monkeypatch.setattr(
+        agent_module, "create_structured_agent",
+        lambda **kwargs: _FakeAgent(NotificationSubject(subject="s")),
+    )
+    monkeypatch.setattr(agent_module, "send_email", capturing_send)
+
+    variants = [
+        _report(),  # full: runbook + environment + resolution evidence
+        _report().model_copy(update={"runbook_references": []}),  # no runbook
+        _report().model_copy(update={"environment": None}),  # missing env
+        _report().model_copy(
+            update={
+                "verification": VerificationResult(is_resolved=False, needs_reinvestigation=True)
+            }
+        ),  # pending
+    ]
+    for report in variants:
+        result = run_notification_agent(report)
+        assert result.success is True
+
+    assert len(captured) == len(variants)
+    for msg in captured:
+        body = msg["html_body"]
+        for marker in ("<table", "border-radius", "1 · Incident Overview", "8 · Investigation Status"):
+            assert marker in body, (marker, msg["subject"])
 
 
 def test_llm_prompt_is_composed_from_report_fields(monkeypatch):
     monkeypatch.setattr(agent_module, "get_current_oncall", lambda: _oncall())
-    fake_agent = _FakeAgent(NotificationEmail(subject="s", body="<p>b</p>"))
+    fake_agent = _FakeAgent(NotificationSubject(subject="s"))
     monkeypatch.setattr(agent_module, "create_structured_agent", lambda **kwargs: fake_agent)
     monkeypatch.setattr(agent_module, "send_email", _fake_send({}))
 
@@ -143,7 +240,7 @@ def test_send_failure_returns_error_result(monkeypatch):
     monkeypatch.setattr(
         agent_module,
         "create_structured_agent",
-        lambda **kwargs: _FakeAgent(NotificationEmail(subject="s", body="<p>b</p>")),
+        lambda **kwargs: _FakeAgent(NotificationSubject(subject="s")),
     )
 
     def boom(to, subject, html_body):
@@ -177,7 +274,7 @@ def test_content_safety_guardrail_blocks_send(monkeypatch):
     monkeypatch.setattr(
         agent_module,
         "create_structured_agent",
-        lambda **kwargs: _FakeAgent(NotificationEmail(subject="s", body="<p>b</p>")),
+        lambda **kwargs: _FakeAgent(NotificationSubject(subject="s")),
     )
     send_calls = []
     monkeypatch.setattr(agent_module, "send_email", lambda **kwargs: send_calls.append(kwargs))
@@ -265,24 +362,15 @@ def test_template_fallback_resolved_subject_has_no_pending_suffix():
     assert "Remediation:" in email.body
 
 
-def test_notification_system_prompt_requires_honest_status_and_canonical_sections():
+def test_notification_system_prompt_is_subject_only_with_honesty_gates():
     from app.agents.notification.prompt import SYSTEM_PROMPT
 
-    for section in (
-        "Incident Summary",
-        "Incident Overview",
-        "Environment",
-        "Impacted Services",
-        "Impact Assessment",
-        "Investigation Findings",
-        "Root Cause Analysis",
-        "Recommended Remediation",
-        "Investigation Status",
-    ):
-        assert section in SYSTEM_PROMPT
-    assert "P1–P4 priority" in SYSTEM_PROMPT
-    assert "<Not Applied / Applied / Pending On-Call Action>" in SYSTEM_PROMPT
-    assert "All nine sections must appear" in SYSTEM_PROMPT
-    assert "remediation_status" in SYSTEM_PROMPT
-    assert "report's statuses" in SYSTEM_PROMPT
+    # The LLM only drafts the subject -- the body is the pipeline's fixed HTML
+    # template, so the prompt must NOT ask it to compose a body anymore.
+    assert "SUBJECT LINE" in SYSTEM_PROMPT
+    assert "body is NOT yours to write" in SYSTEM_PROMPT
     assert "verification_is_resolved" in SYSTEM_PROMPT
+    assert "remediation_status" in SYSTEM_PROMPT
+    assert '"resolved", "fixed", "remediated"' in SYSTEM_PROMPT
+    assert "(remediation pending)" in SYSTEM_PROMPT
+    assert "Plain text only" in SYSTEM_PROMPT
