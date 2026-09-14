@@ -38,3 +38,20 @@ falling back to the legacy `logs` / `events` / `alerts` / `metrics` keys used by
 
 Mock verification outcomes live in `../outcomes/resolved/` and
 `../outcomes/unresolved/`, and generated incident reports in `../reports/`.
+
+## Guardrail-demo incidents
+
+Four incidents are purpose-built to trip a specific guardrail (see
+`app/guardrails/`) so each check has a concrete, runnable example. Each has a
+`metadata.guardrail_demo` tag naming the check and a `metadata.guardrail_note`
+explaining exactly how/why it triggers.
+
+| File | Guardrail | Deterministic? |
+|---|---|---|
+| `pii-leaked-contact-info.json` | PII (`pii_guard.py`) | Yes -- flagged at ingestion regardless of LLM config. |
+| `prompt-injection-attempt.json` | Prompt injection (`prompt_injection.py`) | Yes -- flagged at ingestion regardless of LLM config. |
+| `unsafe-content-in-logs.json` | Content safety (`safety_guard.py`) | Yes via the keyword fallback; blocks the notification email send outright (see `run_notification_agent`). |
+| `sparse-evidence-citation-risk.json` | Citation-existence / schema validation (`validator.py`) | **Best-effort only** -- depends on whether an LLM-backed RCA pass (`--use-llm`) actually hallucinates a citation; the sparse evidence just makes that more likely. For a guaranteed demonstration, see `tests/services/test_rca_report_service.py` and `tests/guardrails/test_custom_backend.py` instead. |
+
+`tests/guardrails/test_sample_incidents.py` locks in the three deterministic
+ones so they keep triggering as the guardrail logic evolves.

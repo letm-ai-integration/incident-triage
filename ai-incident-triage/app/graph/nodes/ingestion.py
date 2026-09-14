@@ -19,8 +19,17 @@ from app.domain.enums.status import IncidentStatus
 from app.domain.models.incident import Incident
 from app.graph.builder import get_deps
 from app.graph.state import IncidentState
+from app.guardrails.domain_guard import check_domain_consistency
 from app.guardrails.pii_guard import check_pii
 from app.guardrails.prompt_injection import check_prompt_injection
+from app.guardrails.safety_guard import check_content_safety
+
+# Checks whose failure quarantines the incident (routes straight to a
+# security-alert notification, skipping classification/investigation/RCA) --
+# each inspects untrusted incident content for something actively adversarial
+# or sensitive, as opposed to check_domain_consistency below, which only
+# flags implausible/incomplete input and never blocks the pipeline.
+_QUARANTINE_CHECKS = (check_prompt_injection, check_pii, check_content_safety)
 
 
 def ingestion_node(state: IncidentState, config: RunnableConfig | None = None) -> dict:
@@ -35,17 +44,23 @@ def ingestion_node(state: IncidentState, config: RunnableConfig | None = None) -
 
     incident = update.get("incident")
     if incident is not None:
-        findings = _run_input_guardrails(incident)
+        findings, quarantined = _run_input_guardrails(incident)
+        findings.extend(_run_domain_guardrail(state.get("raw_input") or {}, incident))
         if findings:
             update["guardrail_findings"] = state.get("guardrail_findings", []) + findings
+        update["quarantined"] = quarantined
+        if quarantined:
+            update["investigation_status"] = IncidentStatus.ESCALATED
 
     return update
 
 
-def _run_input_guardrails(incident: Incident) -> list[dict]:
-    """Prompt-injection + PII checks on the raw incident (HLD §14.1, §31 --
-    defense-in-depth alongside the "untrusted data" framing in every agent
-    prompt; does not block ingestion).
+def _run_input_guardrails(incident: Incident) -> tuple[list[dict], bool]:
+    """Prompt-injection, PII, and content-safety checks on the raw incident
+    (HLD §14.1, §31 -- defense-in-depth alongside the "untrusted data" framing
+    in every agent prompt). A failure on any of these quarantines the
+    incident: it's adversarial or sensitive content, not just messy input, so
+    it should reach a human before any LLM-backed agent touches it.
     """
     text = "\n".join(
         [
@@ -57,9 +72,11 @@ def _run_input_guardrails(incident: Incident) -> list[dict]:
         ]
     )
     findings: list[dict] = []
-    for check in (check_prompt_injection, check_pii):
+    quarantined = False
+    for check in _QUARANTINE_CHECKS:
         result = check("ingestion", text)
         if not result.passed:
+            quarantined = True
             findings.append(
                 {
                     "node": result.node_name,
@@ -68,7 +85,40 @@ def _run_input_guardrails(incident: Incident) -> list[dict]:
                     "findings": result.findings,
                 }
             )
-    return findings
+    return findings, quarantined
+
+
+def _run_domain_guardrail(raw: dict, incident: Incident) -> list[dict]:
+    """Completeness/plausibility check on the raw incident fields, run against
+    the *pre-default* raw values so a silently-defaulted environment/priority
+    (see ``_parse_environment``/``_parse_priority``) is still flagged. Never
+    quarantines -- this catches junk input worth a human glance, not a threat.
+    """
+    from datetime import UTC, datetime
+
+    raw_environment = raw.get("environment")
+    raw_priority_hint = raw.get("priority_hint")
+    metadata = {
+        "title_missing": not incident.title.strip() or incident.title == "Untitled incident",
+        "description_missing": not incident.description.strip(),
+        "timestamp_in_future": incident.timestamp > datetime.now(UTC),
+        "timestamp": incident.timestamp.isoformat(),
+        "environment_invalid": bool(raw_environment) and incident.environment.value != raw_environment,
+        "raw_environment": raw_environment,
+        "priority_hint_invalid": bool(raw_priority_hint) and incident.priority_hint is None,
+        "raw_priority_hint": raw_priority_hint,
+    }
+    result = check_domain_consistency("ingestion", incident.incident_id, metadata=metadata)
+    if result.passed:
+        return []
+    return [
+        {
+            "node": result.node_name,
+            "check": "check_domain_consistency",
+            "passed": result.passed,
+            "findings": result.findings,
+        }
+    ]
 
 
 def _stable_metadata_id(raw: dict) -> str | None:

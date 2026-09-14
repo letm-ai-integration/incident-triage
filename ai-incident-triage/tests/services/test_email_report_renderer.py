@@ -204,6 +204,40 @@ def test_no_none_null_or_empty_artifacts():
         assert banned not in html, banned
 
 
+def test_pii_is_redacted_from_incident_derived_text():
+    """Email addresses in incident-derived free text (reasoning, description,
+    evidence findings, root cause) must never reach the outbound email body --
+    this is exactly what the PII guardrail (app/guardrails/pii_guard.py)
+    flags, so the renderer redacts it before the LLM/template ever sees it.
+    """
+    classification = _report().classification.model_copy(
+        update={"reasoning": "Escalation contact jane.doe@example.com reported the outage."}
+    )
+    report = _report(
+        classification=classification,
+        incident_description="Reported by user john@example.org via ticket.",
+        evidence=EvidenceCollection(
+            summary="1 evidence item",
+            items=[
+                Evidence(
+                    evidence_id="ev-1",
+                    source="log_analysis",
+                    finding="error escalated to ops@corp.com for follow-up",
+                    severity="high",
+                    provenance="OBSERVED",
+                ),
+            ],
+        ),
+    )
+    html = render_html_email_report(report, run_id="cli-inc-20260912")
+
+    for leaked in ("jane.doe@example.com", "john@example.org", "ops@corp.com"):
+        assert leaked not in html
+    assert "[REDACTED:EMAIL]" in html
+    # Generated run-id-shaped metadata must never be caught by the same pass.
+    assert "cli-inc-20260912" in html
+
+
 def test_incident_text_is_html_escaped():
     html = render_html_email_report(
         _report(

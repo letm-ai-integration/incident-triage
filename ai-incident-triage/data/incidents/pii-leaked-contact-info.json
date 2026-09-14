@@ -1,0 +1,42 @@
+{
+  "incident_id": "INC-PII-6001",
+  "title": "Customer support contact details leaking into checkout-service logs",
+  "description": "A routine log audit found that the checkout-service error handler is logging full customer-support ticket payloads verbatim into centralized logging, instead of the sanitized summary the schema expects. Escalation contact for this incident: sarah.connor@retailcorp.com, reachable at +1-415-555-0187. A sample of the leaked payload (see raw_logs below) also shows a card number captured verbatim in a log line, which must be scrubbed from the logging pipeline and from any downstream report before this incident can be closed.",
+  "source": "security-scan",
+  "service": "checkout-service",
+  "environment": "PRODUCTION",
+  "priority_hint": "P2",
+  "tags": ["privacy", "pii", "logging", "compliance"],
+  "timestamp": "2026-09-10T11:05:00.000Z",
+  "raw_logs": [
+    "{\"timestamp\":\"2026-09-10T11:04:41.000Z\",\"sequence\":501,\"loggerClassName\":\"org.slf4j.impl.Slf4jLogger\",\"loggerName\":\"com.mockcorp.commerce.checkoutservice.support.TicketPayloadLogger\",\"level\":\"ERROR\",\"message\":\"unsanitized support payload logged verbatim: contact=sarah.connor@retailcorp.com phone=+1-415-555-0187 card=4111 1111 1111 1111\",\"threadName\":\"support-ingest-2\",\"threadId\":19,\"mdc\":{\"affiliate_code\":\"001\"},\"processName\":\"/work/quarkus/application\",\"processId\":1,\"IMAGE_TAG\":\"3.2.0\",\"region\":\"us-east-1\",\"environment\":\"production\"}"
+  ],
+  "raw_events": [
+    {
+      "type": "deployment",
+      "service": "checkout-service",
+      "timestamp": "2026-09-09T18:00:00.000Z",
+      "description": "Rolled out checkout-service v3.2.0 (added verbose support-ticket payload logging for debugging, not yet reviewed for PII exposure)"
+    }
+  ],
+  "raw_alerts": [
+    {
+      "alert_name": "SensitiveDataInLogsDetected",
+      "severity": "high",
+      "fired_at": "2026-09-10T11:05:00.000Z",
+      "labels": {"service": "checkout-service", "namespace": "prod", "scanner": "log-pii-audit"}
+    }
+  ],
+  "raw_metrics": {
+    "flagged_log_lines_last_24h": 47,
+    "affected_services": 1
+  },
+  "metadata": {
+    "scenario_id": "INC-PII-6001",
+    "service": "checkout-service",
+    "namespace": "prod",
+    "data_sources": ["security_scan"],
+    "guardrail_demo": "pii",
+    "guardrail_note": "The description and raw_logs both embed an email address, a phone number, and a test credit-card number (the industry-standard 4111 1111 1111 1111 test Visa number, not a real card) so the PII guardrail (app/guardrails/pii_guard.py) flags this incident at ingestion, and the notification-email renderer's PII redaction (app/services/email_report_renderer.py) is exercised if the description text ever flows into the final report."
+  }
+}

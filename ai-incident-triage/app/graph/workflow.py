@@ -6,10 +6,12 @@
 #     -> rca_report
 #     -> verification (resolved -> notification; unresolved -> loop to investigation)
 #     -> notification
+#   (ingestion routes straight to notification instead, skipping the above,
+#    when its input guardrails quarantine the incident -- see router.py)
 #
-# The classification/verification stages branch through the pure routing
-# functions in router.py. All node/edge registration goes through builder.py's
-# public API.
+# The ingestion/classification/verification stages branch through the pure
+# routing functions in router.py. All node/edge registration goes through
+# builder.py's public API.
 from typing import Any
 
 from app.graph.builder import (
@@ -32,6 +34,7 @@ from app.graph.nodes import (
 )
 from app.graph.router import (
     route_after_classification,
+    route_after_ingestion,
     route_after_verification,
 )
 from app.graph.state import IncidentState
@@ -50,7 +53,16 @@ def build_triage_graph():
     add_node(graph, "notification", notification_node)
 
     add_edge(graph, START, "ingestion")
-    add_edge(graph, "ingestion", "classification")
+
+    add_conditional_edge(
+        graph,
+        "ingestion",
+        route_after_ingestion,
+        {
+            "quarantine": "notification",
+            "continue": "classification",
+        },
+    )
 
     add_conditional_edge(
         graph,

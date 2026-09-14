@@ -96,3 +96,7 @@ class IncidentState(TypedDict, total=False):
     # Accumulated (never overwritten) findings from every step guardrail that
     # ran and failed, across every node -- see app/guardrails/.
     guardrail_findings: list[dict]
+    # Set at ingestion when prompt-injection, PII, or unsafe content is found
+    # in the raw incident -- routes straight to a security-alert notification,
+    # skipping classification/investigation/RCA entirely (see router.py).
+    quarantined: bool

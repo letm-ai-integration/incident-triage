@@ -29,6 +29,10 @@ def notification_node(state: IncidentState, config: Optional[RunnableConfig] = N
 
 def _default_notify(state: IncidentState, deps: dict) -> dict:
     """Fallback notification: mark stakeholders notified with the final status."""
+    if state.get("quarantined"):
+        # Ingestion already set ESCALATED; the incident never reached
+        # verification, so don't overwrite it with CLOSED below.
+        return {"notification_status": NotificationStatus.NOTIFIED}
     verification = state.get("verification_result")
     if verification is not None:
         status = IncidentStatus.RESOLVED if verification.is_resolved else IncidentStatus.UNRESOLVED

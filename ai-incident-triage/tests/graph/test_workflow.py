@@ -221,3 +221,20 @@ def test_notification_failure_marks_failed_but_completes():
         },
     )
     assert any("notification failed" in e for e in result.get("errors", []))
+
+
+# ---------------------------------------------------------------------------
+# 8. Ingestion-time quarantine routing
+# ---------------------------------------------------------------------------
+
+
+def test_prompt_injection_incident_skips_straight_to_notification():
+    """A quarantined incident must never reach classification/investigation/RCA:
+    only ingestion and notification run."""
+    result = _run(_load("prompt-injection-attempt.json"))
+    assert result["quarantined"] is True
+    assert result["investigation_status"] == IncidentStatus.ESCALATED
+    assert result.get("classification") is None
+    assert result.get("incident_report") is None
+    assert result["notification_status"] == NotificationStatus.NOTIFIED
+    assert any(f["check"] == "check_prompt_injection" for f in result["guardrail_findings"])

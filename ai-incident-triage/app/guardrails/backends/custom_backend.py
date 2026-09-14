@@ -16,7 +16,12 @@ from app.guardrails.models import GuardrailCheckType, GuardrailContext, Guardrai
 logger = logging.getLogger(__name__)
 
 _EMAIL_RE = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
-_PHONE_RE = re.compile(r"(?<!\d)(?:\+?\d{1,3}[\s.-]?)?(?:\(?\d{2,4}\)?[\s.-]?){2,4}\d{3,4}(?!\d)")
+# Requires a leading "+<country code>" so ordinary telemetry (ports, memory
+# sizes, decimal counters, dotted IPs) that happens to be digit-grouped can't
+# match -- those never carry a "+" prefix, but every real phone number this
+# system needs to catch (see data/incidents/pii-leaked-contact-info.json) is
+# international-format. A bare domestic number without "+" is not flagged.
+_PHONE_RE = re.compile(r"(?<!\d)\+\d{1,3}[\s.-]?(?:\(?\d{2,4}\)?[\s.-]?){1,3}\d{3,4}(?!\d)")
 _CREDIT_CARD_RE = re.compile(r"(?<!\d)(?:\d[ -]?){13,19}(?!\d)")
 
 _PROMPT_INJECTION_PHRASES = [
@@ -68,6 +73,21 @@ def _check_pii(context: GuardrailContext) -> GuardrailResult:
         triggered_retry=False,
         backend_used="custom",
     )
+
+
+def redact_pii(text: str) -> str:
+    """Mask email addresses, phone numbers, and credit-card-like digit runs.
+
+    ``_check_pii`` only detects and flags PII; this actually removes it --
+    used to scrub incident-derived text (description, logs, evidence
+    findings) before it reaches an external channel such as the notification
+    email body. Same regexes/precedence as ``_check_pii`` (credit-card
+    checked before phone so a long digit run isn't redacted twice).
+    """
+    text = _CREDIT_CARD_RE.sub("[REDACTED:CARD]", text)
+    text = _EMAIL_RE.sub("[REDACTED:EMAIL]", text)
+    text = _PHONE_RE.sub("[REDACTED:PHONE]", text)
+    return text
 
 
 def _check_prompt_injection(context: GuardrailContext) -> GuardrailResult:
@@ -169,9 +189,41 @@ def _check_schema(context: GuardrailContext) -> GuardrailResult:
     )
 
 
+def _check_domain(context: GuardrailContext) -> GuardrailResult:
+    """Completeness/plausibility check on the raw incident (HLD's
+    domain/business-rule consistency check): flags junk input before it wastes
+    an agent call, rather than checking against a service registry (none
+    exists in this repo yet).
+    """
+    meta = context.metadata
+    findings: list[str] = []
+    if meta.get("title_missing"):
+        findings.append("domain: title is empty or a placeholder")
+    if meta.get("description_missing"):
+        findings.append("domain: description is empty")
+    if meta.get("timestamp_in_future"):
+        findings.append(f"domain: timestamp {meta.get('timestamp')!r} is in the future")
+    if meta.get("environment_invalid"):
+        findings.append(
+            f"domain: environment {meta.get('raw_environment')!r} is not a recognized value"
+        )
+    if meta.get("priority_hint_invalid"):
+        findings.append(
+            f"domain: priority_hint {meta.get('raw_priority_hint')!r} is not a recognized value"
+        )
+    return GuardrailResult(
+        node_name=context.node_name,
+        passed=not findings,
+        findings=findings,
+        triggered_retry=False,
+        backend_used="custom",
+    )
+
+
 _HANDLERS = {
     GuardrailCheckType.PII: _check_pii,
     GuardrailCheckType.PROMPT_INJECTION: _check_prompt_injection,
     GuardrailCheckType.SAFETY: _check_safety,
     GuardrailCheckType.SCHEMA_VALIDATION: _check_schema,
+    GuardrailCheckType.DOMAIN: _check_domain,
 }

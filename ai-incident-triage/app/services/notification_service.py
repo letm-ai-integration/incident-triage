@@ -15,7 +15,7 @@ import logging
 
 from typing import Any
 
-from app.agents.notification.agent import run_notification_agent
+from app.agents.notification.agent import notify_quarantine, run_notification_agent
 from app.config import get_settings
 from app.domain.enums.status import NotificationStatus
 
@@ -23,6 +23,38 @@ logger = logging.getLogger(__name__)
 
 
 def notification_service(state: dict[str, Any], deps: dict[str, Any]) -> dict[str, Any]:
+    if state.get("quarantined"):
+        incident = state.get("incident")
+        if incident is None:
+            logger.error("[notification_service] quarantined but no incident in state -- cannot alert")
+            return {"notification_status": NotificationStatus.FAILED}
+        if not get_settings().resend_api_key:
+            logger.warning(
+                "[notification_service] RESEND_API_KEY not configured -- simulating quarantine alert"
+            )
+            return {
+                "notification_status": NotificationStatus.NOTIFIED,
+                "notification_detail": "simulated quarantine alert (RESEND_API_KEY not configured)",
+            }
+        result = notify_quarantine(incident, state.get("guardrail_findings", []))
+        update: dict[str, Any] = {
+            "notification_status": (
+                NotificationStatus.NOTIFIED if result.success else NotificationStatus.FAILED
+            )
+        }
+        if result.success:
+            logger.info(
+                "[notification_service] quarantine alert delivered to=%s message_id=%s",
+                result.recipient,
+                result.message_id,
+            )
+        else:
+            logger.error("[notification_service] quarantine alert delivery failed: %s", result.error)
+            update["errors"] = state.get("errors", []) + [
+                f"quarantine notification failed: {result.error}"
+            ]
+        return update
+
     report = state.get("incident_report")
     if report is None:
         # Auto-resolve path: no report was produced, nothing to notify about.

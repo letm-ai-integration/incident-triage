@@ -31,6 +31,7 @@ import jinja2
 from app.domain.enums.priority import Priority
 from app.domain.models.hypothesis import HypothesisLabel
 from app.domain.models.report import IncidentReport
+from app.guardrails.pii_guard import redact_pii
 from app.services.rca_report_service import (
     _observed_findings,
     remediation_status,
@@ -145,18 +146,25 @@ def _build_context(report: IncidentReport, run_id: str | None) -> dict[str, Any]
 
 
     # --- Incident Overview (narrative paragraphs) --------------------------
+    # Every piece of incident-derived free text below (reasoning, description,
+    # observed-telemetry summaries) is redacted for PII (email/phone/credit-card
+    # -like patterns) before it reaches the template -- this text originates
+    # from the raw incident payload, not from the pipeline itself, so it's the
+    # one place PII could otherwise leak into an outbound email.
     services = ", ".join(classification.affected_services) or "(not established)"
-    observed = _observed_findings(report.evidence)
+    observed = [redact_pii(item) for item in _observed_findings(report.evidence)]
     observed_text = (
         "; ".join(observed)
         if observed
         else "None independently observed -- no telemetry-backed finding was established."
     )
+    reasoning = redact_pii(classification.reasoning) if classification.reasoning else None
+    incident_description = redact_pii(report.incident_description) if report.incident_description else None
     overview_paragraphs = [
         f"Incident: {report.incident_id}.",
         f"Affected service(s): {services}.",
-        f"Triggering condition: {classification.reasoning or '(not established)'}.",
-        f"Reported trigger (from the source system): {report.incident_description or '(none supplied)'}.",
+        f"Triggering condition: {reasoning or '(not established)'}.",
+        f"Reported trigger (from the source system): {incident_description or '(none supplied)'}.",
         f"Independently observed via telemetry: {observed_text}.",
         (
             f"Summary: {report.incident_title or report.incident_id} --the investigation "
@@ -181,7 +189,7 @@ def _build_context(report: IncidentReport, run_id: str | None) -> dict[str, Any]
     for service in service_names:
 
 
-        mentions = [e.finding for e in report.evidence.items if service in e.finding]
+        mentions = [redact_pii(e.finding) for e in report.evidence.items if service in e.finding]
         impact = (
             "; ".join(mentions[:2])
             if mentions
@@ -217,20 +225,21 @@ def _build_context(report: IncidentReport, run_id: str | None) -> dict[str, Any]
     for item in report.evidence.items:
         findings.append(
             f"{item.source} ({item.severity}, {item.provenance.value}): "
-            f"{item.finding} (evidence: {item.evidence_id})"
+            f"{redact_pii(item.finding)} (evidence: {item.evidence_id})"
         )
     for checkpoint in root_cause.claim_validation:
         if not checkpoint.supported:
+            qualifier = redact_pii(checkpoint.qualifier) if checkpoint.qualifier else None
             findings.append(
                 f"Claim not independently verified ({checkpoint.category.value}): "
-                f"{checkpoint.claim} -- {checkpoint.qualifier or 'unable to verify from observed telemetry'}"
+                f"{redact_pii(checkpoint.claim)} -- {qualifier or 'unable to verify from observed telemetry'}"
             )
 
 
 # --- Root Cause Analysis ------------------------------------------------
     rc_label, rc_color = _root_cause_badge(root_cause)
     contributing_factors = [
-        h.description
+        redact_pii(h.description)
         for h in root_cause.contributing_factors
         if h.label != HypothesisLabel.UNLIKELY
     ]
@@ -241,7 +250,7 @@ def _build_context(report: IncidentReport, run_id: str | None) -> dict[str, Any]
     # --- Recommended Remediation ---------------------------------------------
     if report.runbook_references:
         runbook_status = "Applicable runbook found"
-        remediation_steps = report.recommended_actions or [
+        remediation_steps = [redact_pii(step) for step in report.recommended_actions] or [
             f"Follow runbook: {ref.title}" for ref in report.runbook_references
         ]
         no_runbook = False
@@ -282,13 +291,13 @@ def _build_context(report: IncidentReport, run_id: str | None) -> dict[str, Any]
         # 6
         "root_cause_state": rc_label,
         "root_cause_color": rc_color,
-        "root_cause_explanation": root_cause.primary_cause.description,
+        "root_cause_explanation": redact_pii(root_cause.primary_cause.description),
         "contributing_factors": contributing_factors,
         # 7
         "runbook_status": runbook_status,
         "no_runbook": no_runbook,
         "remediation_steps": remediation_steps,
-        "remediation_actions": report.recommended_actions,
+        "remediation_actions": [redact_pii(action) for action in report.recommended_actions],
         # 8
         "investigation_label": investigation_label,
         "investigation_color": investigation_color,

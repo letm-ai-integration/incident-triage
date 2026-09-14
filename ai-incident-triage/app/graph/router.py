@@ -7,6 +7,7 @@
 # spelling/casing mismatches.
 #
 # v2 routing:
+#   ingestion      -> classification | notification  (quarantine on prompt-injection/PII/unsafe content)
 #   classification -> investigation | notification   (by Priority / IncidentType)
 #   verification   -> investigation | notification   (reinvestigate loop vs done)
 from __future__ import annotations
@@ -19,6 +20,20 @@ from app.domain.enums.priority import Priority
 from app.graph.state import IncidentState
 
 logger = logging.getLogger(__name__)
+
+
+def route_after_ingestion(state: IncidentState) -> str:
+    """Send a quarantined incident straight to notification, skipping
+    classification/investigation/RCA -- see ``ingestion.py``'s input
+    guardrails for what sets ``quarantined``.
+    """
+    if state.get("quarantined"):
+        logger.warning(
+            "[router] route_after_ingestion -> quarantine (incident=%s)",
+            state.get("incident_id"),
+        )
+        return "quarantine"
+    return "continue"
 
 
 def route_after_classification(state: IncidentState) -> str:
@@ -66,5 +81,6 @@ def route_after_verification(state: IncidentState) -> str:
 
 __all__ = [
     "route_after_classification",
+    "route_after_ingestion",
     "route_after_verification",
 ]

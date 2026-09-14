@@ -11,6 +11,7 @@ Resend adapter (``tools/adapters``).
 """
 from __future__ import annotations
 
+import html
 import logging
 from dataclasses import dataclass
 
@@ -20,7 +21,9 @@ from app.agents.notification.parser import (
     parse_notification_response,
 )
 from app.agents.notification.prompt import SYSTEM_PROMPT, build_user_prompt
+from app.domain.models.incident import Incident
 from app.domain.models.report import IncidentReport
+from app.guardrails.pii_guard import redact_pii
 from app.guardrails.safety_guard import check_content_safety
 from app.llm.client import create_structured_agent
 from app.logging_utils import agent_entry, agent_error, agent_exit, agent_output
@@ -163,8 +166,14 @@ def run_notification_agent(
     # validated report values -- it must keep its inline CSS (table layout,
     # badges) for Outlook-compatible delivery, so the LLM allow-list sanitizer
     # is not applied here (it would strip `style=` attributes and break the
-    # styled layout).
+    # styled layout). PII redaction of incident-derived text (description,
+    # logs, findings) happens field-by-field in
+    # ``email_report_renderer._build_context`` before rendering -- not here
+    # on the whole rendered HTML -- so it never touches generated metadata
+    # like the run id or timestamp (e.g. a run id ending in "...20260912"
+    # otherwise reads as a phone-number-shaped digit run to the PII regex).
     sanitized_body = email.body
+    subject = redact_pii(subject)
 
     safety_result = check_content_safety("notification", sanitized_body)
     if not safety_result.passed:
@@ -188,5 +197,55 @@ def run_notification_agent(
         return NotificationResult(success=False, error=str(exc))
 
     agent_output("NotificationAgent", f"delivered to={contact.email} message_id={message_id}")
+    agent_exit("NotificationAgent")
+    return NotificationResult(success=True, recipient=contact.email, message_id=message_id)
+
+
+def notify_quarantine(incident: Incident, guardrail_findings: list[dict]) -> NotificationResult:
+    """Send a security-alert email for an incident quarantined at ingestion
+    (see app/graph/nodes/ingestion.py) -- no RCA report exists yet, so this
+    bypasses the RCA email template entirely and never includes the
+    incident's raw description/logs: that untrusted content is exactly what
+    is being kept away from automated (and now email) rendering, a human
+    reviews it directly instead.
+    """
+    agent_entry("NotificationAgent", f"incident={incident.incident_id} quarantined=True")
+    try:
+        contact = get_current_oncall()
+        logger.info("[notification.agent] on-call recipient=%s (%s)", contact.email, contact.name)
+    except Exception as exc:  # noqa: BLE001
+        logger.error("[notification.agent] on-call lookup failed: %s", exc)
+        agent_error("NotificationAgent", exc, "on-call lookup failed")
+        agent_exit("NotificationAgent")
+        return NotificationResult(success=False, error=str(exc))
+
+    subject = redact_pii(f"[SECURITY] Incident {incident.incident_id} quarantined at ingestion")
+    title = html.escape(redact_pii(incident.title))
+    checks = "".join(
+        f"<li>{html.escape(item.get('check', ''))}: {html.escape('; '.join(item.get('findings', [])))}</li>"
+        for item in guardrail_findings
+    ) or "<li>(no findings recorded)</li>"
+    body = (
+        "<h2>Incident quarantined before automated triage</h2>"
+        f"<p>Incident <b>{html.escape(incident.incident_id)}</b> "
+        f"(service: {html.escape(incident.service)}, environment: {html.escape(incident.environment.value)}) "
+        "was flagged by an input guardrail at ingestion and was <b>not</b> passed to the "
+        "classification/investigation/RCA pipeline.</p>"
+        f"<p><b>Title:</b> {title}</p>"
+        "<p><b>Guardrail findings:</b></p>"
+        f"<ul>{checks}</ul>"
+        "<p>Please review the raw incident content manually before deciding whether to "
+        "re-submit it for automated triage.</p>"
+    )
+
+    try:
+        message_id = send_email(to=contact.email, subject=subject, html_body=body)
+    except EmailSendError as exc:
+        logger.error("[notification.agent] quarantine alert delivery failed: %s", exc)
+        agent_error("NotificationAgent", exc, "quarantine alert delivery failed")
+        agent_exit("NotificationAgent")
+        return NotificationResult(success=False, error=str(exc))
+
+    agent_output("NotificationAgent", f"quarantine alert delivered to={contact.email} message_id={message_id}")
     agent_exit("NotificationAgent")
     return NotificationResult(success=True, recipient=contact.email, message_id=message_id)
