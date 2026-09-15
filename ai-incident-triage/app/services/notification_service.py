@@ -36,7 +36,11 @@ def notification_service(state: dict[str, Any], deps: dict[str, Any]) -> dict[st
                 "notification_status": NotificationStatus.NOTIFIED,
                 "notification_detail": "simulated quarantine alert (RESEND_API_KEY not configured)",
             }
-        result = notify_quarantine(incident, state.get("guardrail_findings", []))
+        result = notify_quarantine(
+            incident,
+            state.get("guardrail_findings", []),
+            run_id=deps.get("run_id"),
+        )
         update: dict[str, Any] = {
             "notification_status": (
                 NotificationStatus.NOTIFIED if result.success else NotificationStatus.FAILED

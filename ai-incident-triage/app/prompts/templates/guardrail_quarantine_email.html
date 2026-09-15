@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Guardrail Quarantine — {{ incident_id }}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f0f2f5;font-family:Arial,Helvetica,sans-serif;color:#23262b;font-size:14px;line-height:1.55;">
+  <!--
+    Dedicated guardrail-quarantine alert email.
+
+    This is deliberately NOT the Incident Summary template
+    (app/prompts/templates/incident_report_email.html): quarantined incidents never
+    reached classification/investigation/RCA, so those sections have no honest
+    content. The warning-colored header band and the fixed alert label below make
+    the two alert types impossible to confuse at a glance.
+
+    Table layout with inline CSS only (Outlook-safe). All dynamic data is
+    HTML-escaped by the renderer (autoescape) before it reaches this file.
+  -->
+
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f0f2f5;">
+    <tr>
+      <td align="center" style="padding:20px 0;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:740px;">
+
+          <!-- ============ WARNING HEADER BAND (distinct from the coral Incident Summary banner) ============ -->
+          <tr>
+            <td style="background-color:#8a1c1c;padding:22px 28px;border-radius:4px 4px 0 0;">
+              <div style="font-size:19px;font-weight:bold;color:#ffffff;letter-spacing:0.4px;line-height:1.35;">{{ alert_label }}</div>
+              <div style="padding-top:12px;color:#ffffff;font-size:16px;font-weight:bold;">Incident {{ incident_id }}</div>
+              <div style="padding-top:4px;color:#f6d5d0;font-size:13px;">{{ service_environment }}</div>
+            </td>
+          </tr>
+
+          <!-- amber warning stripe: visual cue that this is an alert category, not a report -->
+          <tr><td style="background-color:#e0a52e;height:5px;line-height:5px;font-size:0;">&nbsp;</td></tr>
+
+          <tr><td style="height:10px;"></td></tr>
+
+          <!-- ============ WHAT HAPPENED ============ -->
+          <tr>
+            <td style="background-color:#fdf6ef;padding:16px 28px;border:1px solid #ecdcce;">
+              <div style="font-size:16px;font-weight:bold;color:#8a1c1c;">What happened</div>
+              <div style="padding:10px 0 0 0;color:#24292f;">{{ what_happened }}</div>
+            </td>
+          </tr>
+
+          <tr><td style="height:10px;"></td></tr>
+
+          <!-- ============ INCIDENT TITLE ============ -->
+          <tr>
+            <td style="background-color:#fdf6ef;padding:16px 28px;border:1px solid #ecdcce;">
+              <div style="font-size:16px;font-weight:bold;color:#8a1c1c;">Incident Title</div>
+              <div style="padding:10px 0 0 0;color:#24292f;font-size:15px;font-weight:bold;">{{ incident_title }}</div>
+            </td>
+          </tr>
+
+          <tr><td style="height:10px;"></td></tr>
+
+          <!-- ============ GUARDRAIL FINDINGS ============ -->
+          <tr>
+            <td style="background-color:#fdf6ef;padding:16px 28px;border:1px solid #ecdcce;">
+              <div style="font-size:16px;font-weight:bold;color:#8a1c1c;">Guardrail Findings</div>
+              <div style="padding:10px 0 0 0;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
+                  <tr>
+                    <td width="26%" style="background-color:#8a1c1c;color:#ffffff;font-size:12px;font-weight:bold;padding:7px 10px;border:1px solid #8a1c1c;">Check</td>
+                    <td width="18%" style="background-color:#8a1c1c;color:#ffffff;font-size:12px;font-weight:bold;padding:7px 10px;border:1px solid #8a1c1c;">Category</td>
+                    <td width="56%" style="background-color:#8a1c1c;color:#ffffff;font-size:12px;font-weight:bold;padding:7px 10px;border:1px solid #8a1c1c;">Detail</td>
+                  </tr>
+                  {% for row in findings_rows %}
+                  <tr>
+                    <td style="padding:7px 10px;border:1px solid #ecdcce;background-color:#ffffff;color:#24292f;font-size:12px;font-family:'Courier New',Courier,monospace;vertical-align:top;">{{ row.check }}</td>
+                    <td style="padding:7px 10px;border:1px solid #ecdcce;background-color:#ffffff;color:#24292f;font-size:12px;vertical-align:top;">{{ row.category }}</td>
+                    <td style="padding:7px 10px;border:1px solid #ecdcce;background-color:#ffffff;color:#24292f;font-size:12px;vertical-align:top;">{{ row.detail }}</td>
+                  </tr>
+                  {% endfor %}
+                </table>
+              </div>
+            </td>
+          </tr>
+
+          <tr><td style="height:10px;"></td></tr>
+
+          <!-- ============ REQUIRED ACTION ============ -->
+          <tr>
+            <td style="background-color:#fdf6ef;padding:16px 28px;border:1px solid #ecdcce;">
+              <div style="font-size:16px;font-weight:bold;color:#8a1c1c;">Required Action</div>
+              <div style="padding:10px 0 0 0;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                  <tr>
+                    <td style="background-color:#fff4e0;border:1px solid #e0a52e;border-left:5px solid #e0a52e;padding:14px 16px;color:#4a3410;font-size:13px;">
+                      {{ required_action }}
+                    </td>
+                  </tr>
+                </table>
+              </div>
+            </td>
+          </tr>
+
+          <tr><td style="height:12px;"></td></tr>
+
+          <!-- ============ FOOTER BAND (same style as the Incident Summary footer) ============ -->
+          <tr>
+            <td style="background-color:#e8eaef;padding:14px 28px;border-radius:0 0 4px 4px;color:#6b7280;font-size:11px;line-height:1.5;">
+              Incident ID: {{ incident_id }} &nbsp;·&nbsp; Run ID: {{ run_id }} &nbsp;·&nbsp; This is an automated guardrail-quarantine alert generated by the incident-triage pipeline.
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
