@@ -11,7 +11,6 @@ Resend adapter (``tools/adapters``).
 """
 from __future__ import annotations
 
-import html
 import logging
 from dataclasses import dataclass
 
@@ -201,13 +200,23 @@ def run_notification_agent(
     return NotificationResult(success=True, recipient=contact.email, message_id=message_id)
 
 
-def notify_quarantine(incident: Incident, guardrail_findings: list[dict]) -> NotificationResult:
+def notify_quarantine(
+    incident: Incident,
+    guardrail_findings: list[dict],
+    run_id: str | None = None,
+) -> NotificationResult:
     """Send a security-alert email for an incident quarantined at ingestion
     (see app/graph/nodes/ingestion.py) -- no RCA report exists yet, so this
     bypasses the RCA email template entirely and never includes the
     incident's raw description/logs: that untrusted content is exactly what
     is being kept away from automated (and now email) rendering, a human
     reviews it directly instead.
+
+    The body is rendered from the dedicated guardrail-quarantine template
+    (``app/services/quarantine_email_renderer.py``), never the Incident Summary
+    template -- that one describes a completed investigation this incident
+    never had. ``run_id`` is the run's real identifier (assigned before the
+    graph starts) and degrades to an explicit footer value when absent.
     """
     agent_entry("NotificationAgent", f"incident={incident.incident_id} quarantined=True")
     try:
@@ -220,22 +229,13 @@ def notify_quarantine(incident: Incident, guardrail_findings: list[dict]) -> Not
         return NotificationResult(success=False, error=str(exc))
 
     subject = redact_pii(f"[SECURITY] Incident {incident.incident_id} quarantined at ingestion")
-    title = html.escape(redact_pii(incident.title))
-    checks = "".join(
-        f"<li>{html.escape(item.get('check', ''))}: {html.escape('; '.join(item.get('findings', [])))}</li>"
-        for item in guardrail_findings
-    ) or "<li>(no findings recorded)</li>"
-    body = (
-        "<h2>Incident quarantined before automated triage</h2>"
-        f"<p>Incident <b>{html.escape(incident.incident_id)}</b> "
-        f"(service: {html.escape(incident.service)}, environment: {html.escape(incident.environment.value)}) "
-        "was flagged by an input guardrail at ingestion and was <b>not</b> passed to the "
-        "classification/investigation/RCA pipeline.</p>"
-        f"<p><b>Title:</b> {title}</p>"
-        "<p><b>Guardrail findings:</b></p>"
-        f"<ul>{checks}</ul>"
-        "<p>Please review the raw incident content manually before deciding whether to "
-        "re-submit it for automated triage.</p>"
+    # Dedicated quarantine template: HTML-escaped + PII-redacted in the renderer.
+    from app.services.quarantine_email_renderer import render_quarantine_html_email
+
+    body = render_quarantine_html_email(
+        incident,
+        guardrail_findings,
+        run_id=run_id,
     )
 
     try:
